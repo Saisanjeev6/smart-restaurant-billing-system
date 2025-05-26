@@ -1,8 +1,8 @@
 
 'use client';
 
-import type { ChangeEvent, FormEvent } from 'react';
-import { useState, useEffect } from 'react';
+import type { ChangeEvent } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,10 +11,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
-import type { Order, OrderItem, MenuItem as MenuItemType } from '@/types';
+import { MENU_ITEMS, TABLE_NUMBERS } from '@/lib/constants';
+import type { Order, OrderItem } from '@/types';
 import { PlusCircle, Trash2, Send, ListOrdered, ReceiptText } from 'lucide-react';
 import Image from 'next/image';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function WaiterPage() {
   const [selectedTable, setSelectedTable] = useState<string>('');
@@ -25,27 +35,41 @@ export default function WaiterPage() {
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
 
+  const [isBillConfirmOpen, setIsBillConfirmOpen] = useState(false);
+  const [orderForBillConfirmation, setOrderForBillConfirmation] = useState<Order | null>(null);
+
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
+  const getPendingOrderForTable = (tableNumStr: string): Order | undefined => {
+    if (!tableNumStr) return undefined;
+    const tableNum = parseInt(tableNumStr);
+    return activeOrders.find(o => o.tableNumber === tableNum && o.status === 'pending');
+  };
 
   const handleAddItemToOrder = () => {
     if (!selectedMenuItemId || quantity <= 0) {
       toast({ title: 'Error', description: 'Please select an item and specify a valid quantity.', variant: 'destructive' });
       return;
     }
+    if (!selectedTable) {
+        toast({ title: 'Error', description: 'Please select a table first.', variant: 'destructive'});
+        return;
+    }
     const menuItem = MENU_ITEMS.find(item => item.id === selectedMenuItemId);
     if (!menuItem) return;
 
-    const existingItemIndex = currentOrderItems.findIndex(item => item.id === menuItem.id);
-    if (existingItemIndex > -1) {
-      const updatedItems = [...currentOrderItems];
-      updatedItems[existingItemIndex].quantity += quantity;
-      setCurrentOrderItems(updatedItems);
-    } else {
-      setCurrentOrderItems([...currentOrderItems, { ...menuItem, quantity }]);
-    }
+    setCurrentOrderItems(prevItems => {
+      const existingItemIndex = prevItems.findIndex(item => item.id === menuItem.id);
+      if (existingItemIndex > -1) {
+        const updatedItems = [...prevItems];
+        updatedItems[existingItemIndex].quantity += quantity;
+        return updatedItems;
+      } else {
+        return [...prevItems, { ...menuItem, quantity }];
+      }
+    });
     setSelectedMenuItemId('');
     setQuantity(1);
   };
@@ -68,59 +92,87 @@ export default function WaiterPage() {
       return;
     }
 
-    const newOrder: Order = {
-      id: `ORD-${Date.now()}`,
-      tableNumber: parseInt(selectedTable),
-      items: currentOrderItems,
-      status: 'pending',
-      timestamp: new Date().toISOString(),
-      type: 'dine-in',
-    };
+    const tableNum = parseInt(selectedTable);
+    const existingOrder = getPendingOrderForTable(selectedTable);
 
-    setActiveOrders(prevOrders => [...prevOrders, newOrder]);
-    toast({ title: 'Order Submitted', description: `Order for table ${selectedTable} sent to kitchen.` });
+    if (existingOrder) {
+      const updatedItems = [...existingOrder.items];
+      currentOrderItems.forEach(newItem => {
+        const existingItemIndex = updatedItems.findIndex(item => item.id === newItem.id);
+        if (existingItemIndex > -1) {
+          updatedItems[existingItemIndex].quantity += newItem.quantity;
+        } else {
+          updatedItems.push(newItem);
+        }
+      });
+
+      setActiveOrders(prevOrders => 
+        prevOrders.map(o => 
+          o.id === existingOrder.id ? { ...o, items: updatedItems, timestamp: new Date().toISOString() } : o
+        )
+      );
+      toast({ title: 'Order Updated', description: `More items added to Table ${selectedTable}.` });
+    } else {
+      const newOrder: Order = {
+        id: `ORD-${Date.now()}`,
+        tableNumber: tableNum,
+        items: [...currentOrderItems],
+        status: 'pending',
+        timestamp: new Date().toISOString(),
+        type: 'dine-in',
+      };
+      setActiveOrders(prevOrders => [...prevOrders, newOrder]);
+      toast({ title: 'Order Submitted', description: `Order for Table ${selectedTable} sent to kitchen.` });
+    }
+    
     setCurrentOrderItems([]);
-    setSelectedTable('');
+    // Keep selectedTable selected for further additions
   };
 
   const handleGenerateBill = () => {
     if (!selectedTable) {
-      toast({ title: 'Error', description: 'Please select a table number to generate a bill.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Please select a table to generate a bill.', variant: 'destructive' });
       return;
     }
-    if (currentOrderItems.length === 0) {
-      toast({ title: 'Error', description: 'Cannot generate a bill for an empty order.', variant: 'destructive' });
+    const orderToBill = getPendingOrderForTable(selectedTable);
+    if (!orderToBill || orderToBill.items.length === 0) {
+      toast({ title: 'Error', description: `No pending items found for Table ${selectedTable} to bill.`, variant: 'destructive' });
       return;
     }
+    setOrderForBillConfirmation(orderToBill);
+    setIsBillConfirmOpen(true);
+  };
 
-    const subtotal = calculateSubtotal(currentOrderItems);
-    // const taxAmount = subtotal * TAX_RATE;
-    // const totalAmount = subtotal + taxAmount;
+  const confirmAndGenerateBill = () => {
+    if (!orderForBillConfirmation || !selectedTable) return;
 
-    const billedOrder: Order = {
-      id: `ORD-${Date.now()}`, // Using ORD prefix for consistency, status distinguishes it
-      tableNumber: parseInt(selectedTable),
-      items: currentOrderItems,
-      status: 'billed', // New status
-      timestamp: new Date().toISOString(),
-      type: 'dine-in',
-    };
-
-    setActiveOrders(prevOrders => [...prevOrders, billedOrder]);
+    const subtotal = calculateSubtotal(orderForBillConfirmation.items);
+    setActiveOrders(prevOrders =>
+      prevOrders.map(o =>
+        o.id === orderForBillConfirmation.id ? { ...o, status: 'billed', timestamp: new Date().toISOString() } : o
+      )
+    );
+    
     toast({ 
       title: 'Bill Generated', 
-      description: `Bill for Table ${selectedTable} (Subtotal: $${subtotal.toFixed(2)}) is ready. Order cleared.` 
+      description: `Bill for Table ${selectedTable} (Subtotal: $${subtotal.toFixed(2)}) generated. Table cleared.` 
     });
     
     setCurrentOrderItems([]);
     setSelectedTable('');
+    setIsBillConfirmOpen(false);
+    setOrderForBillConfirmation(null);
   };
 
-  const canSubmitOrBill = selectedTable && currentOrderItems.length > 0;
+  const canSubmitOrder = selectedTable && currentOrderItems.length > 0;
+  const pendingOrderForSelectedTable = useMemo(() => getPendingOrderForTable(selectedTable), [selectedTable, activeOrders]);
+  const canGenerateBill = selectedTable && !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0;
 
   if (!isMounted) {
     return null; 
   }
+
+  const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -129,13 +181,22 @@ export default function WaiterPage() {
         <div className="grid gap-6 lg:grid-cols-2">
           <Card className="shadow-lg">
             <CardHeader>
-              <CardTitle className="text-2xl">Create New Order</CardTitle>
-              <CardDescription>Select table, add items, and manage order.</CardDescription>
+              <CardTitle className="text-2xl">Create / Add to Order</CardTitle>
+              <CardDescription>Select table, add items to current order.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="tableNumber">Table Number</Label>
-                <Select value={selectedTable} onValueChange={setSelectedTable} disabled={currentOrderItems.length > 0 && !!selectedTable}>
+                <Select 
+                  value={selectedTable} 
+                  onValueChange={(value) => {
+                    if (currentOrderItems.length > 0) {
+                      toast({ title: "Unsubmitted Items", description: "Please submit or clear current items before changing tables.", variant: "destructive"});
+                      return;
+                    }
+                    setSelectedTable(value);
+                  }}
+                >
                   <SelectTrigger id="tableNumber">
                     <SelectValue placeholder="Select a table" />
                   </SelectTrigger>
@@ -145,8 +206,8 @@ export default function WaiterPage() {
                     ))}
                   </SelectContent>
                 </Select>
-                {currentOrderItems.length > 0 && !!selectedTable && (
-                    <p className="text-xs text-muted-foreground">Clear current order items or generate bill to change table.</p>
+                 {currentOrderItems.length > 0 && selectedTable && (
+                    <p className="text-xs text-muted-foreground">Adding items for Table {selectedTable}. Submit to finalize these items for the table.</p>
                 )}
               </div>
 
@@ -177,7 +238,7 @@ export default function WaiterPage() {
                 />
               </div>
               <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable}>
-                <PlusCircle className="mr-2" /> Add Item
+                <PlusCircle className="mr-2" /> Add Item to Current Selection
               </Button>
             </CardContent>
           </Card>
@@ -185,19 +246,20 @@ export default function WaiterPage() {
           <div className="space-y-6">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle className="text-xl">Current Order Details</CardTitle>
-                {selectedTable && <CardDescription>For Table {selectedTable}</CardDescription>}
+                <CardTitle className="text-xl">Current Items for Submission</CardTitle>
+                {selectedTable && <CardDescription>For Table {selectedTable} (Subtotal for these items: ${calculateSubtotal(currentOrderItems).toFixed(2)})</CardDescription>}
+                 {!selectedTable && <CardDescription>Select a table to start an order.</CardDescription>}
               </CardHeader>
               <CardContent>
                 {currentOrderItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                      <Image src="https://placehold.co/300x200.png" alt="Empty plate" width={150} height={100} className="mb-4 rounded-lg opacity-70" data-ai-hint="empty plate restaurant"/>
-                    <p>{selectedTable ? "No items added yet for this table." : "Select a table to start an order."}</p>
+                    <p>{selectedTable ? "No items added to current selection yet." : "Select a table and add items."}</p>
                   </div>
                 ) : (
                   <ul className="space-y-3">
                     {currentOrderItems.map(item => (
-                      <li key={item.id} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
+                      <li key={item.id + Math.random()} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
                         <div>
                           <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
                           <p className="text-sm text-primary">${(item.price * item.quantity).toFixed(2)}</p>
@@ -210,28 +272,22 @@ export default function WaiterPage() {
                   </ul>
                 )}
               </CardContent>
-              {currentOrderItems.length > 0 && (
+              {(selectedTable || currentOrderItems.length > 0) && (
                 <CardFooter className="flex flex-col gap-4 pt-4 border-t sm:flex-row">
-                  <div className="flex items-center justify-between w-full text-lg font-semibold sm:w-auto sm:flex-grow">
-                    <span>Subtotal:</span>
-                    <span>${calculateSubtotal(currentOrderItems).toFixed(2)}</span>
-                  </div>
-                  <div className="flex flex-col w-full gap-2 sm:flex-row sm:w-auto">
-                    <Button onClick={handleSubmitOrder} className="flex-1" disabled={!canSubmitOrBill}>
-                      <Send className="mr-2" /> Submit Order
+                   <Button onClick={handleSubmitOrder} className="flex-1" disabled={!canSubmitOrder}>
+                      <Send className="mr-2" /> Submit Items to Kitchen
                     </Button>
-                    <Button onClick={handleGenerateBill} className="flex-1" variant="outline" disabled={!canSubmitOrBill}>
-                      <ReceiptText className="mr-2" /> Generate Bill
+                    <Button onClick={handleGenerateBill} className="flex-1" variant="outline" disabled={!canGenerateBill}>
+                      <ReceiptText className="mr-2" /> Generate Bill for Table
                     </Button>
-                  </div>
                 </CardFooter>
               )}
             </Card>
             
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> Active Orders</CardTitle>
-                <CardDescription>Orders processed in this session.</CardDescription>
+                <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> Session Orders</CardTitle>
+                <CardDescription>Orders processed in this session. Full bill generation updates status here.</CardDescription>
               </CardHeader>
               <CardContent>
                 {activeOrders.length === 0 ? (
@@ -241,7 +297,10 @@ export default function WaiterPage() {
                     {activeOrders.map(order => (
                       <li key={order.id} className="p-3 rounded-md bg-muted/50">
                         <div className="flex items-center justify-between">
-                          <span className="font-medium">Table {order.tableNumber} - {order.id.slice(-6)}</span>
+                          <div>
+                            <span className="font-medium">Table {order.tableNumber} - {order.id.slice(-6)}</span>
+                            <p className="text-xs text-muted-foreground">Total: ${calculateSubtotal(order.items).toFixed(2)} ({order.items.reduce((acc, item) => acc + item.quantity, 0)} items)</p>
+                          </div>
                           <span className={`px-2 py-0.5 text-xs rounded-full font-semibold
                             ${order.status === 'billed' ? 'bg-green-100 text-green-700 border border-green-300' : 
                               order.status === 'pending' ? 'bg-blue-100 text-blue-700 border border-blue-300' :
@@ -249,9 +308,9 @@ export default function WaiterPage() {
                             {order.status}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground">{new Date(order.timestamp).toLocaleTimeString()}</p>
-                        <ul className="mt-1 text-xs">
-                          {order.items.map(item => <li key={item.id}>- {item.name} x{item.quantity}</li>)}
+                        <p className="text-xs text-muted-foreground">Last update: {new Date(order.timestamp).toLocaleTimeString()}</p>
+                        <ul className="mt-1 text-xs list-disc list-inside">
+                          {order.items.map(item => <li key={item.id + order.id}>- {item.name} x{item.quantity}</li>)}
                         </ul>
                       </li>
                     ))}
@@ -262,7 +321,35 @@ export default function WaiterPage() {
           </div>
         </div>
       </main>
+
+      {orderForBillConfirmation && (
+        <AlertDialog open={isBillConfirmOpen} onOpenChange={setIsBillConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm Bill for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will finalize the bill for Table {orderForBillConfirmation.tableNumber}. Please review items and subtotal.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
+                <p className="font-semibold">Items:</p>
+                <ul className="list-disc list-inside pl-4">
+                    {orderForBillConfirmation.items.map(item => (
+                        <li key={item.id}>
+                            {item.name} (x{item.quantity}) - ${(item.price * item.quantity).toFixed(2)}
+                        </li>
+                    ))}
+                </ul>
+                <Separator className="my-2" />
+                <p className="font-bold text-base">Subtotal: ${subtotalForBillDialog.toFixed(2)}</p>
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setOrderForBillConfirmation(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmAndGenerateBill}>Confirm & Generate Bill</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }
-
