@@ -2,10 +2,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation'; // Import usePathname
+import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShoppingBag, Utensils, LogIn, Shield, ListChecks } from 'lucide-react';
+import { ShoppingBag, Utensils, LogIn, Shield } from 'lucide-react';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useEffect, useState } from 'react';
 import { getCurrentUser } from '@/lib/auth';
@@ -13,40 +13,43 @@ import type { User } from '@/types';
 
 export default function Home() {
   const router = useRouter();
-  const pathname = usePathname(); // Get current pathname
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const pathname = usePathname();
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    setCurrentUser(user);
     setIsMounted(true);
+  }, []);
 
-    // If a waiter is logged in and lands on '/', redirect them to their dashboard.
-    // Admins will see a specific hub view on '/', so no redirect for them from here.
-    // Unauthenticated users remain on '/' to see login/takeaway options.
-    if (user && user.role === 'waiter') {
-      router.replace('/waiter');
+  // Effect for redirecting logged-in waiters
+  useEffect(() => {
+    if (isMounted) {
+      const user = getCurrentUser();
+      if (user && user.role === 'waiter') {
+        router.replace('/waiter');
+      }
     }
-  }, [router, pathname]); // Add pathname to dependency array
+  }, [isMounted, router, pathname]); // Re-run if path changes or after mount
 
   if (!isMounted) {
-    // Basic loading state to avoid flashing content and layout shifts
+    // Basic loading state
     return (
       <div className="flex flex-col min-h-screen">
         <AppHeader title="Gastronomic Gatherer" />
         <main className="flex items-center justify-center flex-grow">
           <Utensils className="w-16 h-16 animate-pulse text-primary" />
         </main>
-         <footer className="py-6 mt-auto text-center text-muted-foreground">
+        <footer className="py-6 mt-auto text-center text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Gastronomic Gatherer. Powered by Firebase Studio.</p>
         </footer>
       </div>
     );
   }
 
+  // Get current user directly for rendering decisions *after* component is mounted
+  const currentUserForRender = getCurrentUser();
+
   // Content for logged-in ADMIN users: Admin Console + Takeaway tile
-  if (currentUser && currentUser.role === 'admin') {
+  if (currentUserForRender && currentUserForRender.role === 'admin') {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
         <AppHeader title="Admin Hub" />
@@ -85,16 +88,16 @@ export default function Home() {
             </Card>
           </div>
         </main>
-         <footer className="py-6 mt-auto text-center text-muted-foreground">
+        <footer className="py-6 mt-auto text-center text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Gastronomic Gatherer. Powered by Firebase Studio.</p>
         </footer>
       </div>
     );
   }
 
-  // Content for logged-in (non-admin) users (e.g., if a waiter lands here before redirect)
-  // or any other future logged-in role that doesn't have a specific dashboard redirect.
-  if (currentUser) {
+  // Content for other logged-in users (e.g., waiters who might momentarily see this before redirect, or other future roles)
+  // Shows only Takeaway tile.
+  if (currentUserForRender) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
         <AppHeader title="Restaurant Hub" />
@@ -121,7 +124,7 @@ export default function Home() {
             </Card>
           </div>
         </main>
-         <footer className="py-6 mt-auto text-center text-muted-foreground">
+        <footer className="py-6 mt-auto text-center text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Gastronomic Gatherer. Powered by Firebase Studio.</p>
         </footer>
       </div>
