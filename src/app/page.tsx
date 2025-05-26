@@ -2,10 +2,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation'; // Import usePathname
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShoppingBag, Utensils, LogIn, Shield, ListChecks } from 'lucide-react'; // Added Shield, ListChecks
+import { ShoppingBag, Utensils, LogIn, Shield, ListChecks } from 'lucide-react';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useEffect, useState } from 'react';
 import { getCurrentUser } from '@/lib/auth';
@@ -13,6 +13,7 @@ import type { User } from '@/types';
 
 export default function Home() {
   const router = useRouter();
+  const pathname = usePathname(); // Get current pathname
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
@@ -27,8 +28,7 @@ export default function Home() {
     if (user && user.role === 'waiter') {
       router.replace('/waiter');
     }
-    // Redirection for admin/waiter *upon successful login* is handled by the login page itself.
-  }, [router]);
+  }, [router, pathname]); // Add pathname to dependency array
 
   if (!isMounted) {
     // Basic loading state to avoid flashing content and layout shifts
@@ -92,8 +92,8 @@ export default function Home() {
     );
   }
 
-  // Content for logged-in (non-admin) users: Show only Takeaway tile
-  // Note: Waiters are redirected by useEffect, so this primarily catches other potential logged-in roles or edge cases.
+  // Content for logged-in (non-admin) users (e.g., if a waiter lands here before redirect)
+  // or any other future logged-in role that doesn't have a specific dashboard redirect.
   if (currentUser) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
@@ -106,7 +106,7 @@ export default function Home() {
           <p className="mt-3 text-lg text-muted-foreground max-w-xl">
             Manage your takeaway orders efficiently.
           </p>
-          <div className="grid grid-cols-1 max-w-xs gap-6 mt-10">
+          <div className="grid grid-cols-1 max-w-xs gap-6 mt-10 mx-auto">
             <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
               <CardHeader className="items-center text-center">
                 <ShoppingBag className="w-12 h-12 mb-3 text-accent" />
