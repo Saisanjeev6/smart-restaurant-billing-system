@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShoppingBag, Utensils, LogIn } from 'lucide-react';
+import { ShoppingBag, Utensils, LogIn, Shield, ListChecks } from 'lucide-react'; // Added Shield, ListChecks
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useEffect, useState } from 'react';
 import { getCurrentUser } from '@/lib/auth';
@@ -21,12 +21,14 @@ export default function Home() {
     setCurrentUser(user);
     setIsMounted(true);
 
-    // The initial redirection to role-specific dashboards (/admin, /waiter)
-    // is now handled by the login page upon successful login.
-    // This page (`/`) will now render content based on currentUser:
-    // - If logged in (any role): show only Takeaway tile.
-    // - If not logged in: show Login and Takeaway tiles.
-  }, []);
+    // If a waiter is logged in and lands on '/', redirect them to their dashboard.
+    // Admins will see a specific hub view on '/', so no redirect for them from here.
+    // Unauthenticated users remain on '/' to see login/takeaway options.
+    if (user && user.role === 'waiter') {
+      router.replace('/waiter');
+    }
+    // Redirection for admin/waiter *upon successful login* is handled by the login page itself.
+  }, [router]);
 
   if (!isMounted) {
     // Basic loading state to avoid flashing content and layout shifts
@@ -43,11 +45,59 @@ export default function Home() {
     );
   }
 
-  // Content for logged-in users (any role): Show only Takeaway tile
+  // Content for logged-in ADMIN users: Admin Console + Takeaway tile
+  if (currentUser && currentUser.role === 'admin') {
+    return (
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
+        <AppHeader title="Admin Hub" />
+        <main className="flex flex-col items-center justify-center flex-grow p-4 text-center">
+          <Utensils className="w-24 h-24 mx-auto mb-6 text-primary" />
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">
+            Admin Hub
+          </h1>
+          <p className="mt-3 text-lg text-muted-foreground max-w-xl">
+            Access administrative tools or manage takeaway orders.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12 max-w-2xl mx-auto w-full px-4 sm:px-0">
+            <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
+              <CardHeader className="items-center text-center">
+                <Shield className="w-12 h-12 mb-3 text-destructive" />
+                <CardTitle className="text-2xl">Admin Console</CardTitle>
+                <CardDescription>Manage system settings and users.</CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <Button asChild size="lg" className="w-full">
+                  <Link href="/admin">Go to Admin Console</Link>
+                </Button>
+              </CardContent>
+            </Card>
+            <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
+              <CardHeader className="items-center text-center">
+                <ShoppingBag className="w-12 h-12 mb-3 text-accent" />
+                <CardTitle className="text-2xl">Takeaway Orders</CardTitle>
+                <CardDescription>Process and manage takeaway sales.</CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <Button asChild size="lg" className="w-full">
+                  <Link href="/takeaway">Go to Takeaway</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+         <footer className="py-6 mt-auto text-center text-muted-foreground">
+          <p>&copy; {new Date().getFullYear()} Gastronomic Gatherer. Powered by Firebase Studio.</p>
+        </footer>
+      </div>
+    );
+  }
+
+  // Content for logged-in (non-admin) users: Show only Takeaway tile
+  // Note: Waiters are redirected by useEffect, so this primarily catches other potential logged-in roles or edge cases.
   if (currentUser) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
-        <AppHeader title="Gastronomic Gatherer" />
+        <AppHeader title="Restaurant Hub" />
         <main className="flex flex-col items-center justify-center flex-grow p-4 text-center">
           <Utensils className="w-24 h-24 mx-auto mb-6 text-primary" />
           <h1 className="text-4xl font-bold tracking-tight text-foreground">
@@ -56,7 +106,7 @@ export default function Home() {
           <p className="mt-3 text-lg text-muted-foreground max-w-xl">
             Manage your takeaway orders efficiently.
           </p>
-          <div className="grid grid-cols-1 max-w-xs gap-6 mt-10"> {/* Max-width for single card */}
+          <div className="grid grid-cols-1 max-w-xs gap-6 mt-10">
             <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
               <CardHeader className="items-center text-center">
                 <ShoppingBag className="w-12 h-12 mb-3 text-accent" />
