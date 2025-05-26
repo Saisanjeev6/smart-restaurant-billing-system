@@ -36,14 +36,19 @@ export function AppHeader({ title }: AppHeaderProps) {
   const isLoginPage = pathname === '/login';
 
   // Determine the href for the "Home" Utensils icon
-  let homeIconHref = '/'; // Default for unauthenticated or general logged-in home
-  // For logged-in users, the Utensils icon always links to '/',
+  // For logged-in users (admin/waiter), the Utensils icon always links to '/',
   // the home page will then decide what to show based on currentUser.
-  // The initial dashboard redirect happens from the login page itself.
+  const homeIconHref = '/'; 
 
   // Determine if the Utensils icon should be a link or static
   // It's static if on the effective "home" for the current auth state.
-  const isUtensilsIconLinkActive = !((pathname === '/' && !currentUser) || (isLoginPage && !currentUser) || (pathname === '/' && currentUser));
+  // For unauthenticated users, it's static on '/' or '/login'.
+  // For logged-in users, it's always a link from their dashboards back to '/'.
+  const isUtensilsIconLinkActive = !(
+    (pathname === '/' && !currentUser) || 
+    (isLoginPage && !currentUser) ||
+    (pathname === '/' && currentUser && currentUser.role === 'admin') // Admin on admin hub page, icon is static
+  );
 
 
   // Header during initial mount / loading state
