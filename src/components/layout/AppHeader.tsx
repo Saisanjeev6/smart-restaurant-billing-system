@@ -36,6 +36,7 @@ export function AppHeader({ title }: AppHeaderProps) {
   const isLoginPage = pathname === '/login';
 
   // Determine the href for the "Home" Utensils icon
+  // This calculation is now done after the isMounted check for the main render paths
   let homeIconHref = '/';
   if (currentUser) {
     if (currentUser.role === 'admin') {
@@ -46,46 +47,36 @@ export function AppHeader({ title }: AppHeaderProps) {
   }
 
   // Determine if the Utensils icon should be a link or static
-  // It's static if:
-  // 1. On the main home page ('/') AND not logged in.
-  // 2. On the login page ('/login') AND not logged in.
   const isUtensilsIconLinkActive = !((pathname === '/' && !currentUser) || (isLoginPage && !currentUser));
 
 
-  // Minimal header for login page when not logged in
-  if (isLoginPage && !currentUser && isMounted) { // Added isMounted to ensure this renders after initial check
+  // Header during initial mount / loading state
+  if (!isMounted) {
+    return (
+      <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          {/* Static icon during load to prevent incorrect links */}
+          <Utensils className="w-8 h-8 text-primary" />
+          <h1 className="text-xl font-semibold tracking-tight md:text-2xl text-foreground">{title}</h1>
+        </div>
+        {/* No user info or logout button during loading state */}
+      </header>
+    );
+  }
+
+  // Minimal header for login page when not logged in (and isMounted is true)
+  if (isLoginPage && !currentUser) {
      return (
         <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
             <div className="flex items-center gap-3">
-                <Utensils className="w-8 h-8 text-primary" /> {/* Static icon */}
+                <Utensils className="w-8 h-8 text-primary" /> {/* Static icon on login page */}
                 <h1 className="text-xl font-semibold tracking-tight md:text-2xl text-foreground">{title}</h1>
             </div>
         </header>
      );
   }
 
-  // Header during initial mount / loading state
-  if (!isMounted) {
-    // When !isMounted, currentUser is effectively null for this render pass.
-    // isUtensilsIconLinkActive will be calculated based on pathname assuming no user.
-    const showLinkWhileLoading = !((pathname === '/' ) || (pathname === '/login'));
-    return (
-      <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          {showLinkWhileLoading ? (
-            <Link href="/" aria-label="Home" className="transition-colors group">
-              <Utensils className="w-8 h-8 text-primary group-hover:text-primary/80" />
-            </Link>
-          ) : (
-            <Utensils className="w-8 h-8 text-primary" />
-          )}
-          <h1 className="text-xl font-semibold tracking-tight md:text-2xl text-foreground">{title}</h1>
-        </div>
-      </header>
-    );
-  }
-
-  // Default full header for logged-in users or other pages
+  // Default full header for logged-in users or other pages (and isMounted is true)
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
       <div className="flex items-center gap-3">
