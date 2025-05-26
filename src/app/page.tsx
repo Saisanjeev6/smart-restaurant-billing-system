@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { UsersRound, ClipboardPenLine, ShoppingBag, Utensils, LogIn } from 'lucide-react';
+import { ShoppingBag, Utensils, LogIn } from 'lucide-react';
 import Image from 'next/image';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useEffect, useState } from 'react';
@@ -84,7 +84,7 @@ export default function Home() {
           </Link>
         </Button>
 
-        <div className="grid max-w-xs gap-6 mt-12 md:grid-cols-1">
+        <div className="grid grid-cols-1 max-w-xs gap-6 mt-12">
           <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
             <CardHeader className="items-center text-center">
               <ShoppingBag className="w-12 h-12 mb-3 text-accent" />
