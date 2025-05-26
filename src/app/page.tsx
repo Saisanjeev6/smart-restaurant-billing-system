@@ -21,14 +21,12 @@ export default function Home() {
     setCurrentUser(user);
     setIsMounted(true);
 
-    if (user) {
-      if (user.role === 'admin') {
-        router.replace('/admin');
-      } else if (user.role === 'waiter') {
-        router.replace('/waiter');
-      }
-    }
-  }, [router]);
+    // The initial redirection to role-specific dashboards (/admin, /waiter)
+    // is now handled by the login page upon successful login.
+    // This page (`/`) will now render content based on currentUser:
+    // - If logged in (any role): show only Takeaway tile.
+    // - If not logged in: show Login and Takeaway tiles.
+  }, []);
 
   if (!isMounted) {
     // Basic loading state to avoid flashing content and layout shifts
@@ -45,7 +43,7 @@ export default function Home() {
     );
   }
 
-  // Content for logged-in users (if they somehow land on '/' and are not admin/waiter, or before redirect)
+  // Content for logged-in users (any role): Show only Takeaway tile
   if (currentUser) {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
@@ -58,7 +56,7 @@ export default function Home() {
           <p className="mt-3 text-lg text-muted-foreground max-w-xl">
             Manage your takeaway orders efficiently.
           </p>
-          <div className="grid grid-cols-1 max-w-xs gap-6 mt-10">
+          <div className="grid grid-cols-1 max-w-xs gap-6 mt-10"> {/* Max-width for single card */}
             <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
               <CardHeader className="items-center text-center">
                 <ShoppingBag className="w-12 h-12 mb-3 text-accent" />

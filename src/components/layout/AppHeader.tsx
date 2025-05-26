@@ -30,24 +30,20 @@ export function AppHeader({ title }: AppHeaderProps) {
     logout();
     setCurrentUser(null); // Update state immediately
     toast({ title: 'Logged Out', description: 'You have been successfully logged out.' });
-    router.push('/login'); // Redirect to login page
+    router.push('/'); // Redirect to the main home page after logout
   };
 
   const isLoginPage = pathname === '/login';
 
   // Determine the href for the "Home" Utensils icon
-  // This calculation is now done after the isMounted check for the main render paths
-  let homeIconHref = '/';
-  if (currentUser) {
-    if (currentUser.role === 'admin') {
-      homeIconHref = '/admin';
-    } else if (currentUser.role === 'waiter') {
-      homeIconHref = '/waiter';
-    }
-  }
+  let homeIconHref = '/'; // Default for unauthenticated or general logged-in home
+  // For logged-in users, the Utensils icon always links to '/',
+  // the home page will then decide what to show based on currentUser.
+  // The initial dashboard redirect happens from the login page itself.
 
   // Determine if the Utensils icon should be a link or static
-  const isUtensilsIconLinkActive = !((pathname === '/' && !currentUser) || (isLoginPage && !currentUser));
+  // It's static if on the effective "home" for the current auth state.
+  const isUtensilsIconLinkActive = !((pathname === '/' && !currentUser) || (isLoginPage && !currentUser) || (pathname === '/' && currentUser));
 
 
   // Header during initial mount / loading state
