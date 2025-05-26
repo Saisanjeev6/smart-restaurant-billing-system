@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ShoppingBag, Utensils, LogIn } from 'lucide-react';
-import Image from 'next/image';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useEffect, useState } from 'react';
 import { getCurrentUser } from '@/lib/auth';
@@ -46,17 +45,33 @@ export default function Home() {
     );
   }
 
-  // If a logged-in user lands here, the useEffect will redirect them.
-  // This content is primarily for unauthenticated users.
+  // Content for logged-in users (if they somehow land on '/' and are not admin/waiter, or before redirect)
   if (currentUser) {
-    // This state is typically brief as redirection occurs.
-    // You can show a more specific loading message if desired.
     return (
-       <div className="flex flex-col min-h-screen">
+      <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
         <AppHeader title="Gastronomic Gatherer" />
         <main className="flex flex-col items-center justify-center flex-grow p-4 text-center">
-          <Utensils className="w-16 h-16 mb-4 animate-pulse text-primary" />
-          <p className="text-lg text-muted-foreground">Loading your experience...</p>
+          <Utensils className="w-24 h-24 mx-auto mb-6 text-primary" />
+          <h1 className="text-4xl font-bold tracking-tight text-foreground">
+            Restaurant Hub
+          </h1>
+          <p className="mt-3 text-lg text-muted-foreground max-w-xl">
+            Manage your takeaway orders efficiently.
+          </p>
+          <div className="grid grid-cols-1 max-w-xs gap-6 mt-10">
+            <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
+              <CardHeader className="items-center text-center">
+                <ShoppingBag className="w-12 h-12 mb-3 text-accent" />
+                <CardTitle className="text-2xl">Takeaway Orders</CardTitle>
+                <CardDescription>Process and manage takeaway sales.</CardDescription>
+              </CardHeader>
+              <CardContent className="text-center">
+                <Button asChild size="lg" className="w-full">
+                  <Link href="/takeaway">Go to Takeaway</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </main>
          <footer className="py-6 mt-auto text-center text-muted-foreground">
           <p>&copy; {new Date().getFullYear()} Gastronomic Gatherer. Powered by Firebase Studio.</p>
@@ -65,7 +80,7 @@ export default function Home() {
     );
   }
 
-  // Content for unauthenticated users
+  // Content for unauthenticated users: Login tile + Takeaway tile
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
       <AppHeader title="Gastronomic Gatherer" />
@@ -79,13 +94,20 @@ export default function Home() {
           Your all-in-one solution for efficient restaurant billing and order management.
         </p>
 
-        <Button asChild size="lg" className="mt-10 animate-bounce">
-          <Link href="/login">
-            <LogIn className="mr-2" /> Please Login to Continue
-          </Link>
-        </Button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-12 max-w-2xl mx-auto w-full px-4 sm:px-0">
+           <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
+            <CardHeader className="items-center text-center">
+              <LogIn className="w-12 h-12 mb-3 text-primary" />
+              <CardTitle className="text-2xl">Member Access</CardTitle>
+              <CardDescription>Login to access your dashboard.</CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <Button asChild size="lg" className="w-full">
+                <Link href="/login">Sign In</Link>
+              </Button>
+            </CardContent>
+          </Card>
 
-        <div className="grid grid-cols-1 max-w-xs gap-6 mt-12">
           <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
             <CardHeader className="items-center text-center">
               <ShoppingBag className="w-12 h-12 mb-3 text-accent" />
