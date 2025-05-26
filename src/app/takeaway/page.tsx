@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -12,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { MENU_ITEMS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill } from '@/types';
-import { PlusCircle, Trash2, ShoppingBag, User, Phone, Printer, CreditCard } from 'lucide-react';
+import { PlusCircle, Trash2, ShoppingBag, User, Phone, CreditCard, ReceiptText, Printer, RotateCcw } from 'lucide-react';
 import Image from 'next/image';
 
 export default function TakeawayPage() {
@@ -69,7 +70,7 @@ export default function TakeawayPage() {
     const newOrder: Order = {
       id: `TAKE-${Date.now()}`,
       items: currentOrderItems,
-      status: 'pending', // Or 'ready' if payment is next
+      status: 'pending',
       timestamp: new Date().toISOString(),
       type: 'takeaway',
       customerName: customerName || undefined,
@@ -86,7 +87,7 @@ export default function TakeawayPage() {
       subtotal,
       taxRate: TAX_RATE,
       taxAmount,
-      discountAmount: 0, // Takeaway usually no discount here, can be added
+      discountAmount: 0, 
       totalAmount,
       paymentStatus: 'pending',
     });
@@ -96,11 +97,29 @@ export default function TakeawayPage() {
   const processPayment = () => {
     if (!currentBill || !activeOrder) return;
     setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
-    setActiveOrder({ ...activeOrder, status: 'billed' }); // or 'completed'
+    setActiveOrder({ ...activeOrder, status: 'billed' }); 
     toast({ title: 'Payment Processed', description: `Takeaway order ${activeOrder.id.slice(-6)} paid.`, variant: 'default' });
-    // Reset for next order
-    // setCurrentOrderItems([]); setCustomerName(''); setCustomerPhone(''); setCurrentBill(null); setActiveOrder(null);
   };
+
+  const handlePrintBill = () => {
+    if (currentBill?.paymentStatus === 'paid') {
+      window.print();
+    } else {
+      toast({ title: 'Error', description: 'Bill must be paid before printing.', variant: 'destructive' });
+    }
+  };
+
+  const handleStartNewOrder = () => {
+    setCurrentOrderItems([]);
+    setCustomerName('');
+    setCustomerPhone('');
+    setCurrentBill(null);
+    setActiveOrder(null);
+    setSelectedMenuItemId('');
+    setQuantity(1);
+    toast({ title: 'New Order Started', description: 'Ready to take the next takeaway order.'});
+  };
+
 
   if (!isMounted) {
     return null; 
@@ -160,8 +179,8 @@ export default function TakeawayPage() {
             </CardContent>
           </Card>
 
-          <div className="space-y-6">
-            <Card className="shadow-lg">
+          <div className="space-y-6" id="takeaway-right-column">
+            <Card className="shadow-lg" id={currentOrderItems.length > 0 && !currentBill ? "current-order-summary-card" : undefined}>
               <CardHeader>
                 <CardTitle className="text-xl">Current Order Summary</CardTitle>
                 {customerName && <CardDescription>For: {customerName}</CardDescription>}
@@ -188,36 +207,54 @@ export default function TakeawayPage() {
                   </ul>
                 )}
               </CardContent>
-              {currentOrderItems.length > 0 && (
+              {currentOrderItems.length > 0 && !currentBill && (
                 <CardFooter className="flex flex-col gap-4 pt-4 border-t">
                   <div className="flex justify-between w-full text-lg font-semibold">
                     <span>Subtotal:</span>
                     <span>${calculateSubtotal(currentOrderItems).toFixed(2)}</span>
                   </div>
                   <Button onClick={handleGenerateBill} className="w-full" size="lg" disabled={currentBill?.paymentStatus === 'pending'}>
-                    <Printer className="mr-2" /> Generate Bill
+                    <ReceiptText className="mr-2" /> Generate Bill
                   </Button>
                 </CardFooter>
               )}
             </Card>
             
             {currentBill && activeOrder && (
-                <Card className="shadow-lg">
+                <Card className="shadow-lg" id="final-bill-card-takeaway">
                   <CardHeader>
                     <CardTitle>Final Bill (Order {activeOrder.id.slice(-6)})</CardTitle>
+                    {activeOrder.customerName && <CardDescription className="text-sm">Customer: {activeOrder.customerName}</CardDescription>}
                     <CardDescription>Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus}</span></CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
+                    {activeOrder.items.map(item => (
+                        <div key={item.id} className="flex justify-between">
+                            <span>{item.name} (x{item.quantity})</span>
+                            <span>${(item.price * item.quantity).toFixed(2)}</span>
+                        </div>
+                    ))}
+                    <Separator />
                     <div className="flex justify-between"><p>Subtotal:</p><p>${currentBill.subtotal.toFixed(2)}</p></div>
                     <div className="flex justify-between"><p>Tax ({TAX_RATE * 100}%):</p><p>${currentBill.taxAmount.toFixed(2)}</p></div>
                     <Separator />
                     <div className="flex justify-between text-base font-bold"><p>Total Amount:</p><p>${currentBill.totalAmount.toFixed(2)}</p></div>
                   </CardContent>
-                  {currentBill.paymentStatus === 'pending' && (
-                    <CardFooter>
+                  <CardFooter className="flex-col gap-2">
+                    {currentBill.paymentStatus === 'pending' && (
                       <Button onClick={processPayment} className="w-full" size="lg"><CreditCard className="mr-2 h-4 w-4" /> Process Payment</Button>
-                    </CardFooter>
-                  )}
+                    )}
+                    {currentBill.paymentStatus === 'paid' && (
+                      <>
+                        <Button onClick={handlePrintBill} className="w-full" size="lg" variant="outline">
+                          <Printer className="mr-2 h-4 w-4" /> Print Bill
+                        </Button>
+                        <Button onClick={handleStartNewOrder} className="w-full" size="lg">
+                          <RotateCcw className="mr-2 h-4 w-4" /> Start New Order
+                        </Button>
+                      </>
+                    )}
+                  </CardFooter>
                 </Card>
               )}
           </div>

@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -103,6 +104,94 @@
   }
   body {
     @apply bg-background text-foreground;
-    /* Removed font-family: Arial, Helvetica, sans-serif; as layout.tsx handles fonts */
+  }
+}
+
+@media print {
+  body > div > header, /* AppHeader */
+  main > div.grid > div:first-child, /* Hides the order creation card (left column) */
+  main > div.grid > div#takeaway-right-column > #current-order-summary-card /* Hides summary card if bill exists and is not the one being printed */
+   {
+    display: none !important;
+  }
+
+  main > div.grid > div#takeaway-right-column { /* Make the wrapper of the final bill card take over print layout */
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    padding: 0 !important; /* Wrapper itself no padding */
+    margin: 0 !important;
+    background-color: white !important; /* Ensure background for the whole print area is white */
+  }
+
+  #final-bill-card-takeaway { /* The bill card itself */
+    width: 100% !important; 
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 15px !important; /* Overall padding for the bill card content area */
+    box-shadow: none !important;
+    border: 1px solid #aaa !important; /* Light border for definition */
+    font-size: 10pt !important;
+    background-color: white !important;
+    color: black !important;
+  }
+
+  #final-bill-card-takeaway .card-header,
+  #final-bill-card-takeaway .card-content,
+  #final-bill-card-takeaway .card-footer {
+    padding: 8px !important; /* Tighter padding for sections within the card */
+    background-color: white !important;
+    color: black !important;
+  }
+
+  #final-bill-card-takeaway .card-title {
+    font-size: 14pt !important;
+    color: black !important;
+    margin-bottom: 0.5rem !important;
+  }
+  #final-bill-card-takeaway .card-description,
+  #final-bill-card-takeaway .text-sm,
+  #final-bill-card-takeaway p {
+    font-size: 10pt !important;
+    color: black !important;
+    line-height: 1.4 !important;
+  }
+   #final-bill-card-takeaway .text-muted-foreground {
+      color: #333 !important; 
+   }
+
+  #final-bill-card-takeaway .font-semibold { font-weight: 600 !important; }
+  #final-bill-card-takeaway .font-bold { font-weight: 700 !important; }
+
+  #final-bill-card-takeaway button,
+  #final-bill-card-takeaway .hide-on-print { /* Generic class to hide elements if needed */
+    display: none !important;
+  }
+
+  #final-bill-card-takeaway hr,
+  #final-bill-card-takeaway .separator { /* Target Separator component */
+    border-color: #999 !important;
+    background-color: #999 !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  
+  /* Ensure specific themed text colors are overridden for print legibility */
+  #final-bill-card-takeaway [class*="text-primary"],
+  #final-bill-card-takeaway [class*="text-destructive"],
+  #final-bill-card-takeaway [class*="text-orange-"],
+  #final-bill-card-takeaway [class*="text-green-"] {
+      color: black !important;
+  }
+
+  /* Optional: Style or hide icons for print */
+  #final-bill-card-takeaway svg {
+      /* display: none !important; */ /* Option 1: Hide all icons */
+      color: black !important; /* Option 2: Make icons black if visible */
+      fill: black !important; /* If they use fill property */
+      width: 1em !important; /* Standardize icon size if shown */
+      height: 1em !important;
   }
 }
