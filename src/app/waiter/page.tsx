@@ -31,7 +31,7 @@ export default function WaiterPage() {
   const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]); // All orders managed in this session
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
 
@@ -42,11 +42,12 @@ export default function WaiterPage() {
     setIsMounted(true);
   }, []);
 
-  const getPendingOrderForTable = (tableNumStr: string): Order | undefined => {
-    if (!tableNumStr) return undefined;
-    const tableNum = parseInt(tableNumStr);
+  // Memoized value for the pending order of the currently selected table
+  const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
+    if (!selectedTable) return undefined;
+    const tableNum = parseInt(selectedTable);
     return activeOrders.find(o => o.tableNumber === tableNum && o.status === 'pending');
-  };
+  }, [selectedTable, activeOrders]);
 
   const handleAddItemToOrder = () => {
     if (!selectedMenuItemId || quantity <= 0) {
@@ -93,10 +94,14 @@ export default function WaiterPage() {
     }
 
     const tableNum = parseInt(selectedTable);
-    const existingOrder = getPendingOrderForTable(selectedTable);
+    const existingOrderIndex = activeOrders.findIndex(o => o.tableNumber === tableNum && o.status === 'pending');
 
-    if (existingOrder) {
-      const updatedItems = [...existingOrder.items];
+    if (existingOrderIndex > -1) {
+      // Update existing pending order for the table
+      const updatedActiveOrders = [...activeOrders];
+      const orderToUpdate = { ...updatedActiveOrders[existingOrderIndex] };
+      const updatedItems = [...orderToUpdate.items];
+
       currentOrderItems.forEach(newItem => {
         const existingItemIndex = updatedItems.findIndex(item => item.id === newItem.id);
         if (existingItemIndex > -1) {
@@ -105,14 +110,13 @@ export default function WaiterPage() {
           updatedItems.push(newItem);
         }
       });
-
-      setActiveOrders(prevOrders => 
-        prevOrders.map(o => 
-          o.id === existingOrder.id ? { ...o, items: updatedItems, timestamp: new Date().toISOString() } : o
-        )
-      );
+      orderToUpdate.items = updatedItems;
+      orderToUpdate.timestamp = new Date().toISOString();
+      updatedActiveOrders[existingOrderIndex] = orderToUpdate;
+      setActiveOrders(updatedActiveOrders);
       toast({ title: 'Order Updated', description: `More items added to Table ${selectedTable}.` });
     } else {
+      // Create new pending order for the table
       const newOrder: Order = {
         id: `ORD-${Date.now()}`,
         tableNumber: tableNum,
@@ -125,26 +129,23 @@ export default function WaiterPage() {
       toast({ title: 'Order Submitted', description: `Order for Table ${selectedTable} sent to kitchen.` });
     }
     
-    setCurrentOrderItems([]);
-    // Keep selectedTable selected for further additions
+    setCurrentOrderItems([]); // Clear current selection, table remains selected for more items or billing
+    // Do not clear selectedTable here, so user returns to the "All Pending Session Orders" view.
+    // To achieve "return to home page" implies clearing selectedTable.
+    setSelectedTable(''); // Clear selected table to return to "All Pending Session Orders" view.
   };
 
   const handleGenerateBill = () => {
-    if (!selectedTable) {
-      toast({ title: 'Error', description: 'Please select a table to generate a bill.', variant: 'destructive' });
-      return;
-    }
-    const orderToBill = getPendingOrderForTable(selectedTable);
-    if (!orderToBill || orderToBill.items.length === 0) {
+    if (!pendingOrderForSelectedTable) { // Use memoized value
       toast({ title: 'Error', description: `No pending items found for Table ${selectedTable} to bill.`, variant: 'destructive' });
       return;
     }
-    setOrderForBillConfirmation(orderToBill);
+    setOrderForBillConfirmation(pendingOrderForSelectedTable);
     setIsBillConfirmOpen(true);
   };
 
   const confirmAndGenerateBill = () => {
-    if (!orderForBillConfirmation || !selectedTable) return;
+    if (!orderForBillConfirmation) return;
 
     const subtotal = calculateSubtotal(orderForBillConfirmation.items);
     setActiveOrders(prevOrders =>
@@ -155,24 +156,41 @@ export default function WaiterPage() {
     
     toast({ 
       title: 'Bill Generated', 
-      description: `Bill for Table ${selectedTable} (Subtotal: $${subtotal.toFixed(2)}) generated. Table cleared.` 
+      description: `Bill for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) generated.` 
     });
     
-    setCurrentOrderItems([]);
-    setSelectedTable('');
+    setCurrentOrderItems([]); // Clear selection
+    setSelectedTable(''); // Clear selected table, returning to "All Pending Session Orders" view
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
   };
 
   const canSubmitOrder = selectedTable && currentOrderItems.length > 0;
-  const pendingOrderForSelectedTable = useMemo(() => getPendingOrderForTable(selectedTable), [selectedTable, activeOrders]);
-  const canGenerateBill = selectedTable && !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0;
+  const canGenerateBill = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0;
 
   if (!isMounted) {
     return null; 
   }
 
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
+
+  // Filter orders for display in the "Session Orders" card
+  const displayedSessionOrders = useMemo(() => {
+    if (selectedTable && pendingOrderForSelectedTable) {
+      return [pendingOrderForSelectedTable]; // Show only the active order for the selected table
+    }
+    // If no table selected, or selected table has no PENDING order, show all PENDING orders
+    return activeOrders.filter(order => order.status === 'pending');
+  }, [selectedTable, pendingOrderForSelectedTable, activeOrders]);
+
+  const sessionOrdersTitle = selectedTable && pendingOrderForSelectedTable 
+    ? `Pending Order for Table ${selectedTable}` 
+    : "All Pending Session Orders";
+
+  const sessionOrdersDescription = selectedTable && pendingOrderForSelectedTable
+    ? `Details of the current unbilled order for Table ${selectedTable}.`
+    : "Overview of all unbilled orders in this session.";
+
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -190,11 +208,12 @@ export default function WaiterPage() {
                 <Select 
                   value={selectedTable} 
                   onValueChange={(value) => {
-                    if (currentOrderItems.length > 0) {
-                      toast({ title: "Unsubmitted Items", description: "Please submit or clear current items before changing tables.", variant: "destructive"});
+                    if (currentOrderItems.length > 0 && selectedTable !== value) {
+                      toast({ title: "Unsubmitted Items", description: "Submit or clear current items before changing tables.", variant: "destructive"});
                       return;
                     }
                     setSelectedTable(value);
+                    // setCurrentOrderItems([]); // Optionally clear items when table changes if not submitted
                   }}
                 >
                   <SelectTrigger id="tableNumber">
@@ -207,7 +226,7 @@ export default function WaiterPage() {
                   </SelectContent>
                 </Select>
                  {currentOrderItems.length > 0 && selectedTable && (
-                    <p className="text-xs text-muted-foreground">Adding items for Table {selectedTable}. Submit to finalize these items for the table.</p>
+                    <p className="text-xs text-muted-foreground">Adding items for Table {selectedTable}. Submit to add these to the table's pending order.</p>
                 )}
               </div>
 
@@ -215,7 +234,7 @@ export default function WaiterPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="menuItem">Menu Item</Label>
-                <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId}>
+                <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={!selectedTable}>
                   <SelectTrigger id="menuItem">
                     <SelectValue placeholder="Select an item" />
                   </SelectTrigger>
@@ -235,6 +254,7 @@ export default function WaiterPage() {
                   min="1"
                   value={quantity}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value))}
+                  disabled={!selectedTable}
                 />
               </div>
               <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable}>
@@ -286,31 +306,37 @@ export default function WaiterPage() {
             
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> Session Orders</CardTitle>
-                <CardDescription>Orders processed in this session. Full bill generation updates status here.</CardDescription>
+                <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> {sessionOrdersTitle}</CardTitle>
+                <CardDescription>{sessionOrdersDescription}</CardDescription>
               </CardHeader>
               <CardContent>
-                {activeOrders.length === 0 ? (
-                   <p className="text-muted-foreground">No orders processed yet in this session.</p>
+                {displayedSessionOrders.length === 0 ? (
+                   <p className="text-muted-foreground">
+                     {selectedTable && pendingOrderForSelectedTable === undefined 
+                       ? `No pending items for Table ${selectedTable}. Add items above.` 
+                       : selectedTable && pendingOrderForSelectedTable?.items.length === 0
+                       ? `No items yet for Table ${selectedTable}.`
+                       : "No pending orders in this session."}
+                   </p>
                 ) : (
-                  <ul className="space-y-2 max-h-60 overflow-y-auto">
-                    {activeOrders.map(order => (
+                  <ul className="space-y-3 max-h-60 overflow-y-auto">
+                    {displayedSessionOrders.map(order => (
                       <li key={order.id} className="p-3 rounded-md bg-muted/50">
                         <div className="flex items-center justify-between">
                           <div>
-                            <span className="font-medium">Table {order.tableNumber} - {order.id.slice(-6)}</span>
+                            <span className="font-medium">Table {order.tableNumber} - ID: {order.id.slice(-6)}</span>
                             <p className="text-xs text-muted-foreground">Total: ${calculateSubtotal(order.items).toFixed(2)} ({order.items.reduce((acc, item) => acc + item.quantity, 0)} items)</p>
                           </div>
-                          <span className={`px-2 py-0.5 text-xs rounded-full font-semibold
+                           <span className={`px-2 py-0.5 text-xs rounded-full font-semibold
                             ${order.status === 'billed' ? 'bg-green-100 text-green-700 border border-green-300' : 
                               order.status === 'pending' ? 'bg-blue-100 text-blue-700 border border-blue-300' :
                               'bg-gray-100 text-gray-700 border border-gray-300'}`}>
                             {order.status}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground">Last update: {new Date(order.timestamp).toLocaleTimeString()}</p>
-                        <ul className="mt-1 text-xs list-disc list-inside">
-                          {order.items.map(item => <li key={item.id + order.id}>- {item.name} x{item.quantity}</li>)}
+                        <p className="mt-1 text-xs text-muted-foreground">Last update: {new Date(order.timestamp).toLocaleTimeString()}</p>
+                        <ul className="mt-1 text-xs list-disc list-inside pl-1">
+                          {order.items.map(item => <li key={item.id + order.id}>- {item.name} x{item.quantity} (${(item.price * item.quantity).toFixed(2)})</li>)}
                         </ul>
                       </li>
                     ))}
@@ -328,7 +354,7 @@ export default function WaiterPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Confirm Bill for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will finalize the bill for Table {orderForBillConfirmation.tableNumber}. Please review items and subtotal.
+                This will finalize and mark the order for Table {orderForBillConfirmation.tableNumber} as 'billed'. Review items and subtotal before proceeding.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
@@ -341,7 +367,7 @@ export default function WaiterPage() {
                     ))}
                 </ul>
                 <Separator className="my-2" />
-                <p className="font-bold text-base">Subtotal: ${subtotalForBillDialog.toFixed(2)}</p>
+                <p className="font-bold text-base">Order Subtotal: ${subtotalForBillDialog.toFixed(2)}</p>
             </div>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => setOrderForBillConfirmation(null)}>Cancel</AlertDialogCancel>
@@ -353,3 +379,4 @@ export default function WaiterPage() {
     </div>
   );
 }
+
