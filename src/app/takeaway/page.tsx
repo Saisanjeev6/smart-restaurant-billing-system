@@ -1,8 +1,8 @@
-
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,11 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { MENU_ITEMS, TAX_RATE } from '@/lib/constants';
-import type { Order, OrderItem, Bill } from '@/types';
-import { PlusCircle, Trash2, ShoppingBag, User, Phone, CreditCard, ReceiptText, Printer, RotateCcw } from 'lucide-react';
+import type { Order, OrderItem, Bill, User } from '@/types';
+import { PlusCircle, Trash2, ShoppingBag, User as UserIcon, Phone, CreditCard, ReceiptText, Printer, RotateCcw, Sparkles } from 'lucide-react'; // Renamed User to UserIcon
 import Image from 'next/image';
+import { getCurrentUser } from '@/lib/auth';
+
 
 export default function TakeawayPage() {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
@@ -30,8 +34,14 @@ export default function TakeawayPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
+    const user = getCurrentUser();
+    if (!user) { // Any logged-in user (admin or waiter) can access takeaway
+      router.push('/login');
+    } else {
+      setCurrentUser(user);
+      setIsMounted(true);
+    }
+  }, [router]);
 
   const handleAddItemToOrder = () => {
     if (!selectedMenuItemId || quantity <= 0) {
@@ -70,7 +80,7 @@ export default function TakeawayPage() {
     const newOrder: Order = {
       id: `TAKE-${Date.now()}`,
       items: currentOrderItems,
-      status: 'pending',
+      status: 'pending', // Takeaway orders go to pending, then billed after payment
       timestamp: new Date().toISOString(),
       type: 'takeaway',
       customerName: customerName || undefined,
@@ -121,8 +131,12 @@ export default function TakeawayPage() {
   };
 
 
-  if (!isMounted) {
-    return null; 
+  if (!isMounted || !currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Sparkles className="w-12 h-12 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
@@ -138,7 +152,7 @@ export default function TakeawayPage() {
             <CardContent className="space-y-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="customerName" className="flex items-center gap-1"><User className="w-4 h-4" />Customer Name (Optional)</Label>
+                  <Label htmlFor="customerName" className="flex items-center gap-1"><UserIcon className="w-4 h-4" />Customer Name (Optional)</Label>
                   <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="John Doe" />
                 </div>
                 <div className="space-y-2">

@@ -29,3 +29,17 @@ export interface Bill {
   totalAmount: number;
   paymentStatus: 'pending' | 'paid';
 }
+
+// Authentication related types
+export interface User {
+  id: string;
+  username: string;
+  role: 'admin' | 'waiter';
+  password?: string; // Only used during creation/storage, NOT typically exposed
+}
+
+export interface NewUserCredentials {
+  username: string;
+  password?: string; // Password is required for creation
+  role: 'waiter'; // For now, only waiter creation is supported via UI
+}

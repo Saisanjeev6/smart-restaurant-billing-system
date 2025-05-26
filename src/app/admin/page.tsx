@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,10 +13,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
-import type { Order, OrderItem, Bill } from '@/types';
+import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard } from 'lucide-react';
+import { ManageWaitersTool } from './components/ManageWaitersTool';
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog } from 'lucide-react';
 import Image from 'next/image';
+import { getCurrentUser } from '@/lib/auth';
 
 // Mock orders data
 const MOCK_ORDERS: Order[] = [
@@ -34,6 +37,8 @@ const MOCK_ORDERS: Order[] = [
 ];
 
 export default function AdminPage() {
+  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeOrders, setActiveOrders] = useState<Order[]>(MOCK_ORDERS);
   const [selectedTableForBill, setSelectedTableForBill] = useState<string>('');
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
@@ -43,8 +48,14 @@ export default function AdminPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
+    const user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      router.push('/login');
+    } else {
+      setCurrentUser(user);
+      setIsMounted(true);
+    }
+  }, [router]);
 
 
   const calculateOrderTotal = (items: OrderItem[]) => items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -93,8 +104,6 @@ export default function AdminPage() {
     setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
     setActiveOrders(prevOrders => prevOrders.map(o => o.id === orderForBill.id ? { ...o, status: 'billed' } : o));
     toast({ title: 'Payment Processed', description: `Bill for order ${orderForBill.id} marked as paid.`, variant: 'default' });
-    // Optionally clear bill after payment
-    // setCurrentBill(null); setOrderForBill(null); setSelectedTableForBill('');
   };
   
   const orderDetailsForTipTool = useMemo(() => {
@@ -105,8 +114,13 @@ export default function AdminPage() {
     return '';
   }, [orderForBill, currentBill]);
 
-  if (!isMounted) {
-    return null; 
+  if (!isMounted || !currentUser) {
+    // Show a loading state or null while checking auth / redirecting
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Sparkles className="w-12 h-12 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
@@ -114,10 +128,11 @@ export default function AdminPage() {
       <AppHeader title="Admin Dashboard" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-3">
+          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-4">
             <TabsTrigger value="orders" className="flex items-center gap-2"><ListChecks /> Active Orders</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText /> Bill Management</TabsTrigger>
             <TabsTrigger value="tips" className="flex items-center gap-2"><Sparkles /> AI Tip Suggester</TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Waiters</TabsTrigger>
           </TabsList>
 
           <TabsContent value="orders">
@@ -236,6 +251,9 @@ export default function AdminPage() {
 
           <TabsContent value="tips">
             <TipSuggestionTool initialOrderDetails={orderDetailsForTipTool} />
+          </TabsContent>
+          <TabsContent value="users">
+            <ManageWaitersTool />
           </TabsContent>
         </Tabs>
       </main>
