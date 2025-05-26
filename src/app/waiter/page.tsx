@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
@@ -10,9 +11,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { MENU_ITEMS, TABLE_NUMBERS } from '@/lib/constants';
+import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, MenuItem as MenuItemType } from '@/types';
-import { PlusCircle, Trash2, Send, ListOrdered } from 'lucide-react';
+import { PlusCircle, Trash2, Send, ListOrdered, ReceiptText } from 'lucide-react';
 import Image from 'next/image';
 
 export default function WaiterPage() {
@@ -82,6 +83,41 @@ export default function WaiterPage() {
     setSelectedTable('');
   };
 
+  const handleGenerateBill = () => {
+    if (!selectedTable) {
+      toast({ title: 'Error', description: 'Please select a table number to generate a bill.', variant: 'destructive' });
+      return;
+    }
+    if (currentOrderItems.length === 0) {
+      toast({ title: 'Error', description: 'Cannot generate a bill for an empty order.', variant: 'destructive' });
+      return;
+    }
+
+    const subtotal = calculateSubtotal(currentOrderItems);
+    // const taxAmount = subtotal * TAX_RATE;
+    // const totalAmount = subtotal + taxAmount;
+
+    const billedOrder: Order = {
+      id: `ORD-${Date.now()}`, // Using ORD prefix for consistency, status distinguishes it
+      tableNumber: parseInt(selectedTable),
+      items: currentOrderItems,
+      status: 'billed', // New status
+      timestamp: new Date().toISOString(),
+      type: 'dine-in',
+    };
+
+    setActiveOrders(prevOrders => [...prevOrders, billedOrder]);
+    toast({ 
+      title: 'Bill Generated', 
+      description: `Bill for Table ${selectedTable} (Subtotal: $${subtotal.toFixed(2)}) is ready. Order cleared.` 
+    });
+    
+    setCurrentOrderItems([]);
+    setSelectedTable('');
+  };
+
+  const canSubmitOrBill = selectedTable && currentOrderItems.length > 0;
+
   if (!isMounted) {
     return null; 
   }
@@ -94,12 +130,12 @@ export default function WaiterPage() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="text-2xl">Create New Order</CardTitle>
-              <CardDescription>Select table, add items, and submit to kitchen.</CardDescription>
+              <CardDescription>Select table, add items, and manage order.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="tableNumber">Table Number</Label>
-                <Select value={selectedTable} onValueChange={setSelectedTable}>
+                <Select value={selectedTable} onValueChange={setSelectedTable} disabled={currentOrderItems.length > 0 && !!selectedTable}>
                   <SelectTrigger id="tableNumber">
                     <SelectValue placeholder="Select a table" />
                   </SelectTrigger>
@@ -109,6 +145,9 @@ export default function WaiterPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {currentOrderItems.length > 0 && !!selectedTable && (
+                    <p className="text-xs text-muted-foreground">Clear current order items or generate bill to change table.</p>
+                )}
               </div>
 
               <Separator />
@@ -137,7 +176,7 @@ export default function WaiterPage() {
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value))}
                 />
               </div>
-              <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId}>
+              <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable}>
                 <PlusCircle className="mr-2" /> Add Item
               </Button>
             </CardContent>
@@ -152,8 +191,8 @@ export default function WaiterPage() {
               <CardContent>
                 {currentOrderItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                     <Image src="https://placehold.co/300x200.png" alt="Empty plate" width={150} height={100} className="mb-4 rounded-lg opacity-70" data-ai-hint="empty plate restaurant" />
-                    <p>No items added yet. Select items from the menu.</p>
+                     <Image src="https://placehold.co/300x200.png" alt="Empty plate" width={150} height={100} className="mb-4 rounded-lg opacity-70" data-ai-hint="empty plate restaurant"/>
+                    <p>{selectedTable ? "No items added yet for this table." : "Select a table to start an order."}</p>
                   </div>
                 ) : (
                   <ul className="space-y-3">
@@ -172,14 +211,19 @@ export default function WaiterPage() {
                 )}
               </CardContent>
               {currentOrderItems.length > 0 && (
-                <CardFooter className="flex flex-col gap-4 pt-4 border-t">
-                  <div className="flex justify-between w-full text-lg font-semibold">
+                <CardFooter className="flex flex-col gap-4 pt-4 border-t sm:flex-row">
+                  <div className="flex items-center justify-between w-full text-lg font-semibold sm:w-auto sm:flex-grow">
                     <span>Subtotal:</span>
                     <span>${calculateSubtotal(currentOrderItems).toFixed(2)}</span>
                   </div>
-                  <Button onClick={handleSubmitOrder} className="w-full" size="lg" disabled={!selectedTable}>
-                    <Send className="mr-2" /> Submit Order
-                  </Button>
+                  <div className="flex flex-col w-full gap-2 sm:flex-row sm:w-auto">
+                    <Button onClick={handleSubmitOrder} className="flex-1" disabled={!canSubmitOrBill}>
+                      <Send className="mr-2" /> Submit Order
+                    </Button>
+                    <Button onClick={handleGenerateBill} className="flex-1" variant="outline" disabled={!canSubmitOrBill}>
+                      <ReceiptText className="mr-2" /> Generate Bill
+                    </Button>
+                  </div>
                 </CardFooter>
               )}
             </Card>
@@ -187,18 +231,23 @@ export default function WaiterPage() {
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> Active Orders</CardTitle>
-                <CardDescription>Orders submitted in this session.</CardDescription>
+                <CardDescription>Orders processed in this session.</CardDescription>
               </CardHeader>
               <CardContent>
                 {activeOrders.length === 0 ? (
-                   <p className="text-muted-foreground">No orders submitted yet in this session.</p>
+                   <p className="text-muted-foreground">No orders processed yet in this session.</p>
                 ) : (
                   <ul className="space-y-2 max-h-60 overflow-y-auto">
                     {activeOrders.map(order => (
                       <li key={order.id} className="p-3 rounded-md bg-muted/50">
-                        <div className="flex justify-between">
+                        <div className="flex items-center justify-between">
                           <span className="font-medium">Table {order.tableNumber} - {order.id.slice(-6)}</span>
-                          <span className="text-sm capitalize text-primary">{order.status}</span>
+                          <span className={`px-2 py-0.5 text-xs rounded-full font-semibold
+                            ${order.status === 'billed' ? 'bg-green-100 text-green-700 border border-green-300' : 
+                              order.status === 'pending' ? 'bg-blue-100 text-blue-700 border border-blue-300' :
+                              'bg-gray-100 text-gray-700 border border-gray-300'}`}>
+                            {order.status}
+                          </span>
                         </div>
                         <p className="text-xs text-muted-foreground">{new Date(order.timestamp).toLocaleTimeString()}</p>
                         <ul className="mt-1 text-xs">
@@ -216,3 +265,4 @@ export default function WaiterPage() {
     </div>
   );
 }
+
