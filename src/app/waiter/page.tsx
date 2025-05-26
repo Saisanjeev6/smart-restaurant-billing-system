@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { MENU_ITEMS, TABLE_NUMBERS } from '@/lib/constants';
 import type { Order, OrderItem } from '@/types';
-import { PlusCircle, Trash2, Send, ListOrdered, ReceiptText } from 'lucide-react';
+import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered } from 'lucide-react';
 import Image from 'next/image';
 import {
   AlertDialog,
@@ -25,16 +25,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function WaiterPage() {
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]); // All orders managed in this session
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
-
   const [isBillConfirmOpen, setIsBillConfirmOpen] = useState(false);
   const [orderForBillConfirmation, setOrderForBillConfirmation] = useState<Order | null>(null);
 
@@ -42,25 +42,22 @@ export default function WaiterPage() {
     setIsMounted(true);
   }, []);
 
-  // Memoized value for the pending order of the currently selected table
+  const calculateSubtotal = useCallback((items: OrderItem[]) => {
+    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, []);
+
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable) return undefined;
     const tableNum = parseInt(selectedTable);
     return activeOrders.find(o => o.tableNumber === tableNum && o.status === 'pending');
   }, [selectedTable, activeOrders]);
 
-  // Moved displayedSessionOrders useMemo here, BEFORE the early return
-  const displayedSessionOrders = useMemo(() => {
-    if (selectedTable && pendingOrderForSelectedTable) {
-      return [pendingOrderForSelectedTable]; // Show only the active order for the selected table
-    }
-    // If no table selected, or selected table has no PENDING order, show all PENDING orders
-    return activeOrders.filter(order => order.status === 'pending');
-  }, [selectedTable, pendingOrderForSelectedTable, activeOrders]);
+  const allPendingOrdersList = useMemo(() => {
+    return activeOrders
+      .filter(order => order.status === 'pending')
+      .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
+  }, [activeOrders]);
 
-  const calculateSubtotal = useCallback((items: OrderItem[]) => {
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, []);
 
   const handleAddItemToOrder = () => {
     if (!selectedMenuItemId || quantity <= 0) {
@@ -106,16 +103,11 @@ export default function WaiterPage() {
     const existingOrderIndex = activeOrders.findIndex(o => o.tableNumber === tableNum && o.status === 'pending');
 
     if (existingOrderIndex > -1) {
-      // Update existing pending order for the table
       setActiveOrders(prevOrders => {
         const updatedActiveOrders = [...prevOrders];
         const orderToUpdate = { ...updatedActiveOrders[existingOrderIndex] };
         const updatedItemsMap = new Map<string, OrderItem>();
-
-        // Add existing items to map
         orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item}));
-
-        // Add or update new items from currentOrderItems
         currentOrderItems.forEach(newItem => {
           if (updatedItemsMap.has(newItem.id)) {
             const existingItem = updatedItemsMap.get(newItem.id)!;
@@ -124,7 +116,6 @@ export default function WaiterPage() {
             updatedItemsMap.set(newItem.id, {...newItem});
           }
         });
-        
         orderToUpdate.items = Array.from(updatedItemsMap.values());
         orderToUpdate.timestamp = new Date().toISOString();
         updatedActiveOrders[existingOrderIndex] = orderToUpdate;
@@ -132,11 +123,10 @@ export default function WaiterPage() {
       });
       toast({ title: 'Order Updated', description: `More items added to Table ${selectedTable}.` });
     } else {
-      // Create new pending order for the table
       const newOrder: Order = {
         id: `ORD-${Date.now()}`,
         tableNumber: tableNum,
-        items: [...currentOrderItems], // Fresh items
+        items: [...currentOrderItems],
         status: 'pending',
         timestamp: new Date().toISOString(),
         type: 'dine-in',
@@ -145,8 +135,8 @@ export default function WaiterPage() {
       toast({ title: 'Order Submitted', description: `Order for Table ${selectedTable} sent to kitchen.` });
     }
     
-    setCurrentOrderItems([]); 
-    setSelectedTable(''); 
+    setCurrentOrderItems([]);
+    // Keep selectedTable to allow adding more items easily.
   };
 
   const handleGenerateBill = () => {
@@ -170,7 +160,7 @@ export default function WaiterPage() {
     
     toast({ 
       title: 'Bill Generated', 
-      description: `Bill for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) generated.` 
+      description: `Bill for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) generated. Order cleared from active view.` 
     });
     
     setCurrentOrderItems([]); 
@@ -179,9 +169,8 @@ export default function WaiterPage() {
     setOrderForBillConfirmation(null);
   };
 
-  const canSubmitOrder = selectedTable && currentOrderItems.length > 0;
-  const canGenerateBill = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0;
-
+  const canSubmitCurrentSelection = selectedTable && currentOrderItems.length > 0;
+  const canGenerateBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0;
 
   if (!isMounted) {
     return null; 
@@ -189,199 +178,236 @@ export default function WaiterPage() {
 
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
 
-  const sessionOrdersTitle = selectedTable && pendingOrderForSelectedTable 
-    ? `Pending Order for Table ${selectedTable}` 
-    : "All Pending Session Orders";
-
-  const sessionOrdersDescription = selectedTable && pendingOrderForSelectedTable
-    ? `Details of the current unbilled order for Table ${selectedTable}.`
-    : "Overview of all unbilled orders in this session.";
-
-
   return (
     <div className="flex flex-col min-h-screen">
       <AppHeader title="Waiter Interface" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-2xl">Create / Add to Order</CardTitle>
-              <CardDescription>Select table, add items to current order.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="tableNumber">Table Number</Label>
-                <Select 
-                  value={selectedTable} 
-                  onValueChange={(value) => {
-                    if (currentOrderItems.length > 0 && selectedTable !== value && selectedTable !== '') {
-                      toast({ title: "Unsubmitted Items", description: "Submit or clear current items before changing tables.", variant: "destructive"});
-                      return;
-                    }
-                    setSelectedTable(value);
-                    setCurrentOrderItems([]); 
-                  }}
-                >
-                  <SelectTrigger id="tableNumber">
-                    <SelectValue placeholder="Select a table" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TABLE_NUMBERS.map(num => (
-                      <SelectItem key={num} value={String(num)}>Table {num}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                 {currentOrderItems.length > 0 && selectedTable && (
-                    <p className="text-xs text-muted-foreground">Adding items for Table {selectedTable}. Submit to add these to the table's pending order.</p>
-                )}
+        <Tabs defaultValue="orderManagement" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="orderManagement" className="flex items-center gap-2"><ClipboardEdit /> Order Management</TabsTrigger>
+            <TabsTrigger value="allPending" className="flex items-center gap-2"><ListOrdered /> All Pending Orders</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="orderManagement">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Column 1: Order Creation */}
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-2xl">Create / Add to Order</CardTitle>
+                  <CardDescription>Select table, add items to current selection.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="tableNumber">Table Number</Label>
+                    <Select 
+                      value={selectedTable} 
+                      onValueChange={(value) => {
+                        if (currentOrderItems.length > 0 && selectedTable !== value && selectedTable !== '') {
+                          toast({ title: "Unsubmitted Items", description: "Submit or clear current selection before changing tables.", variant: "destructive"});
+                          return;
+                        }
+                        setSelectedTable(value);
+                        setCurrentOrderItems([]); 
+                      }}
+                    >
+                      <SelectTrigger id="tableNumber">
+                        <SelectValue placeholder="Select a table" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TABLE_NUMBERS.map(num => (
+                          <SelectItem key={num} value={String(num)}>Table {num}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {currentOrderItems.length > 0 && selectedTable && (
+                        <p className="text-xs text-muted-foreground">Adding items for Table {selectedTable}. Submit to add these to table's order.</p>
+                    )}
+                  </div>
+                  <Separator />
+                  <div className="space-y-2">
+                    <Label htmlFor="menuItem">Menu Item</Label>
+                    <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={!selectedTable}>
+                      <SelectTrigger id="menuItem">
+                        <SelectValue placeholder="Select an item" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MENU_ITEMS.map(item => (
+                          <SelectItem key={item.id} value={item.id}>{item.name} - ${item.price.toFixed(2)}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quantity">Quantity</Label>
+                    <Input
+                      id="quantity"
+                      type="number"
+                      min="1"
+                      value={quantity}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value) || 1)}
+                      disabled={!selectedTable}
+                    />
+                  </div>
+                  <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable}>
+                    <PlusCircle className="mr-2" /> Add Item to Current Selection
+                  </Button>
+                </CardContent>
+              </Card>
+
+              {/* Column 2: Current Selection & Pending Order for Selected Table */}
+              <div className="space-y-6">
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl">Current Items for Submission</CardTitle>
+                    {selectedTable && <CardDescription>For Table {selectedTable} (Subtotal for this selection: ${calculateSubtotal(currentOrderItems).toFixed(2)})</CardDescription>}
+                    {!selectedTable && <CardDescription>Select a table to start an order.</CardDescription>}
+                  </CardHeader>
+                  <CardContent>
+                    {currentOrderItems.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                        <Image src="https://placehold.co/300x200.png" alt="Empty plate" width={150} height={100} className="mb-4 rounded-lg opacity-70" data-ai-hint="empty plate restaurant"/>
+                        <p>{selectedTable ? "No items in current selection." : "Select a table and add items."}</p>
+                      </div>
+                    ) : (
+                      <ul className="space-y-3">
+                        {currentOrderItems.map(item => (
+                          <li key={item.id + Math.random()} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
+                            <div>
+                              <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
+                              <p className="text-sm text-primary">${(item.price * item.quantity).toFixed(2)}</p>
+                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
+                              <Trash2 className="w-4 h-4 text-destructive" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                  {(selectedTable || currentOrderItems.length > 0) && (
+                    <CardFooter className="flex flex-col gap-4 pt-4 border-t sm:flex-row">
+                      <Button onClick={handleSubmitOrder} className="flex-1" disabled={!canSubmitCurrentSelection}>
+                          <Send className="mr-2" /> Submit Selection to Kitchen
+                        </Button>
+                    </CardFooter>
+                  )}
+                </Card>
+                
+                <Card className="shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-xl">
+                      {selectedTable ? `Pending Order for Table ${selectedTable}` : "Select Table to View Order"}
+                    </CardTitle>
+                    {selectedTable && !pendingOrderForSelectedTable && <CardDescription>No pending items for this table. Add items above.</CardDescription>}
+                    {selectedTable && pendingOrderForSelectedTable && <CardDescription>Total subtotal: ${calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}</CardDescription>}
+                  </CardHeader>
+                  <CardContent>
+                    {!selectedTable ? (
+                       <p className="text-muted-foreground text-center py-4">Select a table from the panel on the left to view its pending order details here.</p>
+                    ) : pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 ? (
+                      <ul className="space-y-2 max-h-60 overflow-y-auto">
+                        {pendingOrderForSelectedTable.items.map(item => (
+                          <li key={item.id} className="p-2 rounded-md bg-muted/30">
+                            <div className="flex justify-between items-center">
+                                <span>{item.name} (x{item.quantity})</span>
+                                <span>${(item.price * item.quantity).toFixed(2)}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground text-center py-4">No items submitted to kitchen for Table {selectedTable} yet.</p>
+                    )}
+                  </CardContent>
+                  {selectedTable && pendingOrderForSelectedTable && (
+                    <CardFooter>
+                       <Button onClick={handleGenerateBill} className="w-full" variant="outline" disabled={!canGenerateBillForSelectedTable}>
+                          <ReceiptText className="mr-2" /> Generate Bill for Table {selectedTable}
+                        </Button>
+                    </CardFooter>
+                  )}
+                </Card>
               </div>
+            </div>
+          </TabsContent>
 
-              <Separator />
-
-              <div className="space-y-2">
-                <Label htmlFor="menuItem">Menu Item</Label>
-                <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={!selectedTable}>
-                  <SelectTrigger id="menuItem">
-                    <SelectValue placeholder="Select an item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MENU_ITEMS.map(item => (
-                      <SelectItem key={item.id} value={item.id}>{item.name} - ${item.price.toFixed(2)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  value={quantity}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value) || 1)}
-                  disabled={!selectedTable}
-                />
-              </div>
-              <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable}>
-                <PlusCircle className="mr-2" /> Add Item to Current Selection
-              </Button>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-6">
+          <TabsContent value="allPending">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle className="text-xl">Current Items for Submission</CardTitle>
-                {selectedTable && <CardDescription>For Table {selectedTable} (Subtotal for these items: ${calculateSubtotal(currentOrderItems).toFixed(2)})</CardDescription>}
-                 {!selectedTable && <CardDescription>Select a table to start an order.</CardDescription>}
+                <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> All Pending Session Orders</CardTitle>
+                <CardDescription>Overview of all unbilled orders in this session, sorted by table number.</CardDescription>
               </CardHeader>
               <CardContent>
-                {currentOrderItems.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                     <Image src="https://placehold.co/300x200.png" alt="Empty plate" width={150} height={100} className="mb-4 rounded-lg opacity-70" data-ai-hint="empty plate restaurant"/>
-                    <p>{selectedTable ? "No items added to current selection yet." : "Select a table and add items."}</p>
+                {allPendingOrdersList.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                    <Image src="https://placehold.co/400x250.png" alt="Empty restaurant overview" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant empty tables" />
+                    <p>No pending orders across any tables in this session.</p>
                   </div>
                 ) : (
-                  <ul className="space-y-3">
-                    {currentOrderItems.map(item => (
-                      <li key={item.id + Math.random()} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
-                        <div>
-                          <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
-                          <p className="text-sm text-primary">${(item.price * item.quantity).toFixed(2)}</p>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-              {(selectedTable || currentOrderItems.length > 0) && (
-                <CardFooter className="flex flex-col gap-4 pt-4 border-t sm:flex-row">
-                   <Button onClick={handleSubmitOrder} className="flex-1" disabled={!canSubmitOrder}>
-                      <Send className="mr-2" /> Submit Items to Kitchen
-                    </Button>
-                    <Button onClick={handleGenerateBill} className="flex-1" variant="outline" disabled={!canGenerateBill}>
-                      <ReceiptText className="mr-2" /> Generate Bill for Table
-                    </Button>
-                </CardFooter>
-              )}
-            </Card>
-            
-            <Card className="shadow-lg">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> {sessionOrdersTitle}</CardTitle>
-                <CardDescription>{sessionOrdersDescription}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {displayedSessionOrders.length === 0 ? (
-                   <p className="text-muted-foreground">
-                     {selectedTable && pendingOrderForSelectedTable === undefined 
-                       ? `No pending items for Table ${selectedTable}. Add items above.` 
-                       : selectedTable && pendingOrderForSelectedTable?.items.length === 0
-                       ? `No items yet for Table ${selectedTable}.`
-                       : "No pending orders in this session."}
-                   </p>
-                ) : (
-                  <ul className="space-y-3 max-h-60 overflow-y-auto">
-                    {displayedSessionOrders.map(order => (
-                      <li key={order.id} className="p-3 rounded-md bg-muted/50">
-                        <div className="flex items-center justify-between">
+                  <ul className="space-y-4">
+                    {allPendingOrdersList.map(order => (
+                      <li key={order.id} className="p-4 rounded-lg border bg-card">
+                        <div className="flex items-center justify-between mb-2">
                           <div>
-                            <span className="font-medium">Table {order.tableNumber} - ID: {order.id.slice(-6)}</span>
-                            <p className="text-xs text-muted-foreground">Total: ${calculateSubtotal(order.items).toFixed(2)} ({order.items.reduce((acc, item) => acc + item.quantity, 0)} items)</p>
+                            <span className="text-lg font-semibold">Table {order.tableNumber}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">(ID: ...{order.id.slice(-4)})</span>
                           </div>
-                           <span className={`px-2 py-0.5 text-xs rounded-full font-semibold
-                            ${order.status === 'billed' ? 'bg-green-100 text-green-700 border border-green-300' : 
-                              order.status === 'pending' ? 'bg-blue-100 text-blue-700 border border-blue-300' :
-                              'bg-gray-100 text-gray-700 border border-gray-300'}`}>
+                          <span className={`px-3 py-1 text-xs rounded-full font-semibold capitalize
+                            ${order.status === 'pending' ? 'bg-blue-100 text-blue-700 border border-blue-300' : ''}`}>
                             {order.status}
                           </span>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">Last update: {new Date(order.timestamp).toLocaleTimeString()}</p>
-                        <ul className="mt-1 text-xs list-disc list-inside pl-1">
-                          {order.items.map(item => <li key={item.id + order.id}>- {item.name} x{item.quantity} (${(item.price * item.quantity).toFixed(2)})</li>)}
-                        </ul>
+                        <p className="text-sm text-muted-foreground mb-1">
+                          Total Items: {order.items.reduce((acc, item) => acc + item.quantity, 0)}
+                        </p>
+                        <p className="text-sm font-medium mb-2">
+                          Subtotal: ${calculateSubtotal(order.items).toFixed(2)}
+                        </p>
+                        <details className="text-xs">
+                            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View Items ({order.items.length})</summary>
+                            <ul className="mt-1 list-disc list-inside pl-4 space-y-0.5 text-muted-foreground">
+                            {order.items.map(item => <li key={item.id + order.id}>{item.name} x{item.quantity} (${(item.price * item.quantity).toFixed(2)})</li>)}
+                            </ul>
+                        </details>
+                        <p className="mt-2 text-xs text-muted-foreground/80">Last update: {new Date(order.timestamp).toLocaleTimeString()}</p>
                       </li>
                     ))}
                   </ul>
                 )}
               </CardContent>
             </Card>
-          </div>
-        </div>
-      </main>
+          </TabsContent>
+        </Tabs>
 
-      {orderForBillConfirmation && (
-        <AlertDialog open={isBillConfirmOpen} onOpenChange={setIsBillConfirmOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Bill for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will finalize and mark the order for Table {orderForBillConfirmation.tableNumber} as 'billed'. Review items and subtotal before proceeding.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
-                <p className="font-semibold">Items:</p>
-                <ul className="list-disc list-inside pl-4">
-                    {orderForBillConfirmation.items.map(item => (
-                        <li key={item.id}>
-                            {item.name} (x{item.quantity}) - ${(item.price * item.quantity).toFixed(2)}
-                        </li>
-                    ))}
-                </ul>
-                <Separator className="my-2" />
-                <p className="font-bold text-base">Order Subtotal: ${subtotalForBillDialog.toFixed(2)}</p>
-            </div>
-            <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setOrderForBillConfirmation(null)}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmAndGenerateBill}>Confirm & Generate Bill</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-      )}
+        {orderForBillConfirmation && (
+          <AlertDialog open={isBillConfirmOpen} onOpenChange={setIsBillConfirmOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirm Bill for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will finalize and mark the order for Table {orderForBillConfirmation.tableNumber} as 'billed'. Review items and subtotal before proceeding.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
+                  <p className="font-semibold">Items:</p>
+                  <ul className="list-disc list-inside pl-4">
+                      {orderForBillConfirmation.items.map(item => (
+                          <li key={item.id}>
+                              {item.name} (x{item.quantity}) - ${(item.price * item.quantity).toFixed(2)}
+                          </li>
+                      ))}
+                  </ul>
+                  <Separator className="my-2" />
+                  <p className="font-bold text-base">Order Subtotal: ${subtotalForBillDialog.toFixed(2)}</p>
+              </div>
+              <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setOrderForBillConfirmation(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={confirmAndGenerateBill}>Confirm & Generate Bill</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </main>
     </div>
   );
 }
