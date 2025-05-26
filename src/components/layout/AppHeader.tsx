@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Utensils, LogOut, UserCircle, ShieldAlert } from 'lucide-react'; // Removed ArrowLeft, HomeIcon
+import { Utensils, LogOut, UserCircle, ShieldAlert } from 'lucide-react';
 import { getCurrentUser, logout } from '@/lib/auth';
 import type { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -56,7 +56,7 @@ export function AppHeader({ title }: AppHeaderProps) {
   if (isLoginPage && !currentUser && isMounted) { // Added isMounted to ensure this renders after initial check
      return (
         <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
-            <div className="flex items-center gap-3"> {/* Consistent gap */}
+            <div className="flex items-center gap-3">
                 <Utensils className="w-8 h-8 text-primary" /> {/* Static icon */}
                 <h1 className="text-xl font-semibold tracking-tight md:text-2xl text-foreground">{title}</h1>
             </div>
@@ -73,8 +73,8 @@ export function AppHeader({ title }: AppHeaderProps) {
       <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
         <div className="flex items-center gap-3">
           {showLinkWhileLoading ? (
-            <Link href="/" aria-label="Home" className="text-primary hover:text-primary/80 transition-colors">
-              <Utensils className="w-8 h-8" />
+            <Link href="/" aria-label="Home" className="transition-colors group">
+              <Utensils className="w-8 h-8 text-primary group-hover:text-primary/80" />
             </Link>
           ) : (
             <Utensils className="w-8 h-8 text-primary" />
@@ -90,8 +90,8 @@ export function AppHeader({ title }: AppHeaderProps) {
     <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
       <div className="flex items-center gap-3">
         {isUtensilsIconLinkActive ? (
-          <Link href={homeIconHref} aria-label="Home" className="text-primary hover:text-primary/80 transition-colors">
-            <Utensils className="w-8 h-8" />
+          <Link href={homeIconHref} aria-label="Home" className="transition-colors group">
+            <Utensils className="w-8 h-8 text-primary group-hover:text-primary/80" />
           </Link>
         ) : (
           <Utensils className="w-8 h-8 text-primary" />
