@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -34,7 +35,7 @@ export default function Home() {
     // Basic loading state to avoid flashing content and layout shifts
     return (
       <div className="flex flex-col min-h-screen">
-        <AppHeader title="Gastronomic Gatherer" showBackButton={false} />
+        <AppHeader title="Gastronomic Gatherer" />
         <main className="flex items-center justify-center flex-grow">
           <Utensils className="w-16 h-16 animate-pulse text-primary" />
         </main>
@@ -52,7 +53,7 @@ export default function Home() {
     // You can show a more specific loading message if desired.
     return (
        <div className="flex flex-col min-h-screen">
-        <AppHeader title="Gastronomic Gatherer" showBackButton={false} />
+        <AppHeader title="Gastronomic Gatherer" />
         <main className="flex flex-col items-center justify-center flex-grow p-4 text-center">
           <Utensils className="w-16 h-16 mb-4 animate-pulse text-primary" />
           <p className="text-lg text-muted-foreground">Loading your experience...</p>
@@ -67,7 +68,7 @@ export default function Home() {
   // Content for unauthenticated users
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
-      <AppHeader title="Gastronomic Gatherer" showBackButton={false} />
+      <AppHeader title="Gastronomic Gatherer" />
       
       <main className="flex flex-col items-center justify-center flex-grow p-4 text-center">
         <Utensils className="w-24 h-24 mx-auto mb-6 text-primary" />

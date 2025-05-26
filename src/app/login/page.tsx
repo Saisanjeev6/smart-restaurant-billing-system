@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, type FormEvent, useEffect } from 'react';
@@ -55,7 +56,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
-      <AppHeader title="Restaurant System Login" showBackButton={false} />
+      <AppHeader title="Restaurant System Login" />
       <main className="flex items-center justify-center flex-grow p-4">
         <Card className="w-full max-w-md shadow-xl">
           <CardHeader className="text-center">
