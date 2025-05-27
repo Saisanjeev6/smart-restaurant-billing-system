@@ -17,12 +17,15 @@ import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageWaitersTool } from './components/ManageWaitersTool';
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info } from 'lucide-react';
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
-import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay } from 'date-fns';
+import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { cn } from "@/lib/utils"
 
 
 // Enhanced Mock orders data for analytics
@@ -81,7 +84,7 @@ const MOCK_ORDERS: Order[] = [
   }
 ];
 
-type AnalyticsPeriod = 'today' | 'week' | '10days' | 'month' | '2months';
+type AnalyticsPeriod = 'today' | 'week' | 'month' | '2months' | 'custom';
 
 const chartConfig = {
   totalSales: {
@@ -103,6 +106,9 @@ export default function AdminPage() {
   const [isMounted, setIsMounted] = useState(false);
 
   const [selectedAnalyticsPeriod, setSelectedAnalyticsPeriod] = useState<AnalyticsPeriod>('month');
+  const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
+  const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
+
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -119,21 +125,26 @@ export default function AdminPage() {
 
   const billedOrders = useMemo(() => activeOrders.filter(order => order.status === 'billed'), [activeOrders]);
 
-  const formatPeriodLabel = (period: AnalyticsPeriod, start: Date, end: Date): string => {
+  const formatPeriodLabel = (period: AnalyticsPeriod, start?: Date, end?: Date): string => {
+    if (!start || !end) return 'Custom range not set';
     switch (period) {
       case 'today': return `Today (${format(start, 'MMM d')})`;
       case 'week': return `This Week (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
-      case '10days': return `Last 10 Days (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
       case 'month': return `This Month (${format(start, 'MMMM yyyy')})`;
       case '2months': return `Last 2 Months (${format(start, 'MMMM yyyy')} - ${format(end, 'MMMM yyyy')})`;
+      case 'custom':
+        if (isValid(start) && isValid(end)) {
+          return `Custom: ${format(start, 'MMM d, yyyy')} - ${format(end, 'MMM d, yyyy')}`;
+        }
+        return 'Custom range not fully set';
       default: return '';
     }
   };
 
   const analyticsData = useMemo(() => {
     const now = new Date();
-    let startDate: Date;
-    let endDate: Date = endOfDay(now);
+    let startDate: Date | undefined;
+    let endDate: Date | undefined = endOfDay(now);
 
     switch (selectedAnalyticsPeriod) {
       case 'today':
@@ -142,23 +153,39 @@ export default function AdminPage() {
       case 'week':
         startDate = startOfWeek(now, { weekStartsOn: 1 }); // Assuming week starts on Monday
         break;
-      case '10days':
-        startDate = startOfDay(subDays(now, 9)); // 9 days ago to include today as 10th day
-        break;
       case 'month':
         startDate = startOfMonth(now);
         break;
       case '2months':
         startDate = startOfMonth(subMonths(now, 1)); // Start of the previous month
+        endDate = endOfMonth(now); // End of current month to cover two full months
+        break;
+      case 'custom':
+        startDate = customStartDate ? startOfDay(customStartDate) : undefined;
+        endDate = customEndDate ? endOfDay(customEndDate) : undefined;
         break;
       default:
         startDate = startOfMonth(now);
     }
     
-    const filteredOrders = billedOrders.filter(order => {
-      const orderDate = parseISO(order.timestamp);
-      return isWithinInterval(orderDate, { start: startDate, end: endDate });
-    });
+    let filteredOrders: Order[] = [];
+    let periodLabel = 'Loading...';
+
+    if (startDate && endDate) {
+      if (startDate > endDate) {
+        toast({ title: "Invalid Date Range", description: "Start date cannot be after end date.", variant: "destructive" });
+        periodLabel = 'Invalid custom range';
+      } else {
+        filteredOrders = billedOrders.filter(order => {
+          const orderDate = parseISO(order.timestamp);
+          return isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
+        });
+        periodLabel = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
+      }
+    } else if (selectedAnalyticsPeriod === 'custom') {
+      periodLabel = 'Please select a start and end date for the custom range.';
+    }
+
 
     const totalSales = filteredOrders.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
     const totalOrders = filteredOrders.length;
@@ -168,11 +195,12 @@ export default function AdminPage() {
       totalSales,
       totalOrders,
       averageOrderValue,
-      periodLabel: formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate)
+      periodLabel
     };
-  }, [billedOrders, selectedAnalyticsPeriod]);
+  }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, toast]);
 
   const monthlyChartData = useMemo(() => {
+    // This logic remains the same, as it always shows the last 6 months regardless of selected period
     const now = new Date();
     const salesByMonth: { [monthYear: string]: { month: string, monthNumeric: number, year: number, totalSales: number } } = {};
 
@@ -188,7 +216,6 @@ export default function AdminPage() {
       salesByMonth[monthYearStr].totalSales += calculateOrderTotal(order.items);
     });
     
-    // Get data for the last 6 months, including current
     const chartDataPoints = [];
     for (let i = 5; i >= 0; i--) {
       const targetMonthDate = subMonths(now, i);
@@ -269,9 +296,9 @@ export default function AdminPage() {
   const analyticsPeriods: { label: string; value: AnalyticsPeriod }[] = [
     { label: 'Today', value: 'today' },
     { label: 'This Week', value: 'week' },
-    { label: 'Last 10 Days', value: '10days' },
     { label: 'This Month', value: 'month' },
     { label: 'Last 2 Months', value: '2months' },
+    { label: 'Custom Range', value: 'custom' },
   ];
 
   return (
@@ -414,20 +441,80 @@ export default function AdminPage() {
                 <CardDescription>Analyze sales data over different periods. Displaying data for <span className="font-semibold">{analyticsData.periodLabel}</span>.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex flex-wrap items-center gap-2 p-2 rounded-md bg-muted">
-                  <CalendarDays className="w-5 h-5 text-muted-foreground" />
-                  <span className="mr-2 text-sm font-medium text-muted-foreground">Select Period:</span>
-                  {analyticsPeriods.map(period => (
-                    <Button
-                      key={period.value}
-                      variant={selectedAnalyticsPeriod === period.value ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setSelectedAnalyticsPeriod(period.value)}
-                    >
-                      {period.label}
-                    </Button>
-                  ))}
+                <div className="flex flex-col gap-4 p-3 rounded-md bg-muted">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <CalendarDays className="w-5 h-5 text-muted-foreground" />
+                    <span className="mr-2 text-sm font-medium text-muted-foreground">Select Period:</span>
+                    {analyticsPeriods.map(period => (
+                      <Button
+                        key={period.value}
+                        variant={selectedAnalyticsPeriod === period.value ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setSelectedAnalyticsPeriod(period.value)}
+                      >
+                        {period.label}
+                      </Button>
+                    ))}
+                  </div>
+                  {selectedAnalyticsPeriod === 'custom' && (
+                    <div className="grid grid-cols-1 gap-4 pt-2 border-t sm:grid-cols-2 border-border">
+                      <div>
+                        <Label htmlFor="customStartDate" className="text-xs">Start Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              id="customStartDate"
+                              variant={"outline"}
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !customStartDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="w-4 h-4 mr-2" />
+                              {customStartDate ? format(customStartDate, "PPP") : <span>Pick a start date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={customStartDate}
+                              onSelect={setCustomStartDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div>
+                        <Label htmlFor="customEndDate" className="text-xs">End Date</Label>
+                         <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              id="customEndDate"
+                              variant={"outline"}
+                              className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !customEndDate && "text-muted-foreground"
+                              )}
+                            >
+                              <CalendarIcon className="w-4 h-4 mr-2" />
+                              {customEndDate ? format(customEndDate, "PPP") : <span>Pick an end date</span>}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={customEndDate}
+                              onSelect={setCustomEndDate}
+                              disabled={(date) => customStartDate && date < customStartDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
 
                 <div className="grid gap-4 md:grid-cols-3">
                   <Card className="bg-card/50">
