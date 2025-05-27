@@ -330,43 +330,67 @@ export default function AdminPage() {
       totalAmount,
       paymentStatus: order.status === 'paid' ? 'paid' : 'pending',
     });
-    setDiscountPercentage(0);
+    setDiscountPercentage(0); // Reset discount when a new bill is loaded
     toast({ title: 'Bill Loaded', description: `Bill for Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) is ready.` });
   };
 
 
   const applyDiscount = () => {
-    if (!currentBill || !orderForBill) return;
+    if (!currentBill || !orderForBill || currentBill.paymentStatus === 'paid') return; // Can't apply discount if already paid
     const discountValue = (currentBill.subtotal * discountPercentage) / 100;
     const newTotal = currentBill.subtotal + currentBill.taxAmount - discountValue;
     setCurrentBill({ ...currentBill, discountAmount: discountValue, totalAmount: newTotal });
     toast({ title: 'Discount Applied', description: `${discountPercentage}% discount applied to the bill.` });
   };
-
-  const processPayment = () => {
-    if (!currentBill || !orderForBill) return;
-
-    const success = updateSharedOrderStatus(orderForBill.id, 'paid');
-    if(success) {
-      setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
-      toast({ title: 'Payment Processed', description: `Bill for order ${orderForBill.id.slice(-6)} marked as paid.`, variant: 'default' });
-
-      setOrderForBill(null);
-      setCurrentBill(null);
-      setDiscountPercentage(0);
-      loadAllOrders();
-    } else {
-      toast({ title: 'Error', description: `Failed to process payment for order ${orderForBill.id.slice(-6)}.`, variant: 'destructive' });
-    }
-  };
-
+  
   const handlePrintAdminBill = () => {
-    if (currentBill && orderForBill) {
-      window.print();
-    } else {
+    if (!currentBill || !orderForBill) {
       toast({ title: 'Error', description: 'No bill loaded to print.', variant: 'destructive' });
+      return;
+    }
+
+    let paymentFinalized = orderForBill.status === 'paid';
+
+    if (orderForBill.status === 'bill_requested') {
+      // Apply discount before marking as paid if one is set
+      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100;
+      const finalTotal = currentBill.subtotal + currentBill.taxAmount - currentDiscount;
+      
+      const success = updateSharedOrderStatus(orderForBill.id, 'paid');
+      if (success) {
+        setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid', discountAmount: currentDiscount, totalAmount: finalTotal } : null);
+        setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null);
+
+        toast({
+          title: 'Bill Finalized',
+          description: `Order ...${orderForBill.id.slice(-6)} marked as paid. Printing bill...`,
+        });
+        paymentFinalized = true;
+      } else {
+        toast({ title: 'Error', description: `Failed to mark order ...${orderForBill.id.slice(-6)} as paid.`, variant: 'destructive' });
+        return; 
+      }
+    }
+
+    if (paymentFinalized) {
+        window.print();
+        // Clear the bill card after printing and processing a 'bill_requested' order
+        // Or after re-printing a 'paid' order to ensure admin selects a new request
+        setTimeout(() => {
+            setOrderForBill(null);
+            setCurrentBill(null);
+            setDiscountPercentage(0);
+            loadAllOrders(); // Explicitly refresh the list of requests
+        }, 100);
+    } else if (orderForBill.status !== 'bill_requested') { 
+        // This case is for printing a bill that was not in 'bill_requested' state,
+        // e.g., admin manually loaded an older 'paid' order (if UI allowed)
+        // or a 'pending' order for review (though current UI focuses on 'bill_requested')
+        toast({ title: 'Printing Bill', description: 'Printing current bill details.' });
+        window.print();
     }
   };
+
 
   const getStatusBadgeClass = (status: Order['status']): string => {
     switch (status) {
@@ -375,7 +399,7 @@ export default function AdminPage() {
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
-      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300';
+      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300'; // 'billed' might be a transient state before 'paid'
       case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
@@ -523,7 +547,7 @@ export default function AdminPage() {
                     <Separator />
                     <div className="flex justify-between text-lg font-bold"><p>Total:</p><p>${currentBill.totalAmount.toFixed(2)}</p></div>
 
-                    {currentBill.paymentStatus === 'pending' && (
+                    {currentBill.paymentStatus === 'pending' && orderForBill.status === 'bill_requested' && (
                       <>
                         <Separator />
                         <div className="flex items-end gap-2 pt-2">
@@ -531,17 +555,23 @@ export default function AdminPage() {
                             <Label htmlFor="discount">Discount (%)</Label>
                             <Input id="discount" type="number" value={discountPercentage} onChange={e => setDiscountPercentage(parseFloat(e.target.value) || 0)} min="0" max="100" />
                           </div>
-                          <Button onClick={applyDiscount} variant="outline"><Percent className="mr-2 h-4 w-4" />Apply</Button>
+                          <Button onClick={applyDiscount} variant="outline" disabled={currentBill.paymentStatus === 'paid'}><Percent className="mr-2 h-4 w-4" />Apply</Button>
                         </div>
                       </>
                     )}
                   </CardContent>
                   <CardFooter className="flex-col gap-2">
-                    {currentBill.paymentStatus === 'pending' && (
-                      <Button onClick={processPayment} className="w-full" size="lg"><CreditCard className="mr-2 h-4 w-4" /> Process Payment</Button>
-                    )}
-                     <Button onClick={handlePrintAdminBill} className="w-full" variant="outline" size="lg" disabled={!currentBill}>
-                        <Printer className="mr-2 h-4 w-4" /> Print Bill
+                     <Button 
+                        onClick={handlePrintAdminBill} 
+                        className="w-full" 
+                        variant="outline" 
+                        size="lg" 
+                        disabled={!currentBill || (orderForBill.status !== 'bill_requested' && orderForBill.status !== 'paid')}
+                      >
+                        <Printer className="mr-2 h-4 w-4" /> 
+                        {orderForBill.status === 'bill_requested' ? 'Finalize Payment & Print Bill' 
+                          : orderForBill.status === 'paid' ? 'Print Bill (Reprint)' 
+                          : 'Print Bill'}
                      </Button>
                   </CardFooter>
                 </Card>
