@@ -119,6 +119,17 @@ export default function AdminPage() {
 
   const billedOrders = useMemo(() => activeOrders.filter(order => order.status === 'billed'), [activeOrders]);
 
+  const formatPeriodLabel = (period: AnalyticsPeriod, start: Date, end: Date): string => {
+    switch (period) {
+      case 'today': return `Today (${format(start, 'MMM d')})`;
+      case 'week': return `This Week (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
+      case '10days': return `Last 10 Days (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
+      case 'month': return `This Month (${format(start, 'MMMM yyyy')})`;
+      case '2months': return `Last 2 Months (${format(start, 'MMMM yyyy')} - ${format(end, 'MMMM yyyy')})`;
+      default: return '';
+    }
+  };
+
   const analyticsData = useMemo(() => {
     const now = new Date();
     let startDate: Date;
@@ -160,17 +171,6 @@ export default function AdminPage() {
       periodLabel: formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate)
     };
   }, [billedOrders, selectedAnalyticsPeriod]);
-
-  const formatPeriodLabel = (period: AnalyticsPeriod, start: Date, end: Date): string => {
-    switch (period) {
-      case 'today': return `Today (${format(start, 'MMM d')})`;
-      case 'week': return `This Week (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
-      case '10days': return `Last 10 Days (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
-      case 'month': return `This Month (${format(start, 'MMMM yyyy')})`;
-      case '2months': return `Last 2 Months (${format(start, 'MMMM yyyy')} - ${format(end, 'MMMM yyyy')})`;
-      default: return '';
-    }
-  };
 
   const monthlyChartData = useMemo(() => {
     const now = new Date();
@@ -501,3 +501,5 @@ export default function AdminPage() {
   );
 }
 
+
+    
