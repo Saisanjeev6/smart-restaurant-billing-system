@@ -20,6 +20,7 @@ import { ManageWaitersTool } from './components/ManageWaitersTool';
 import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
+import { getSharedOrders, initializeSharedOrdersWithMockData } from '@/lib/orderManager';
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"
@@ -29,7 +30,7 @@ import { cn } from "@/lib/utils"
 
 
 // Enhanced Mock orders data for analytics and active orders display
-const MOCK_ORDERS: Order[] = [
+const MOCK_ORDERS_SEED: Order[] = [
   {
     id: 'ORD-1001', tableNumber: 3, items: [{ ...MENU_ITEMS[0], quantity: 2 }, { ...MENU_ITEMS[2], quantity: 1 }],
     status: 'billed', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in'
@@ -39,7 +40,7 @@ const MOCK_ORDERS: Order[] = [
     status: 'billed', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in'
   },
   {
-    id: 'TAKE-001', customerName: 'Quick Bite', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[7], quantity: 1 }],
+    id: 'TAKE-001', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[7], quantity: 1 }],
     status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway' // 3 mins ago
   },
   {
@@ -51,7 +52,7 @@ const MOCK_ORDERS: Order[] = [
     status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway' // 5 mins ago
   },
   {
-    id: 'ORD-1005', customerName: 'Alice Smith', items: [{ ...MENU_ITEMS[0], quantity: 2 }], // This was a takeaway in original, changed to dine-in for consistency in active orders
+    id: 'ORD-1005', items: [{ ...MENU_ITEMS[0], quantity: 2 }], 
     tableNumber: 9, status: 'pending', timestamp: new Date(Date.now() - 86400000 * 8).toISOString(), type: 'dine-in'
   },
   {
@@ -67,7 +68,7 @@ const MOCK_ORDERS: Order[] = [
     status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in'
   },
    {
-    id: 'ORD-1008', customerName: 'Bob Johnson', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }],
+    id: 'ORD-1008', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }],
     tableNumber: 10, status: 'pending', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 2)).toISOString(), type: 'dine-in'
   },
   {
@@ -83,11 +84,11 @@ const MOCK_ORDERS: Order[] = [
     status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in'
   },
   {
-    id: 'TAKE-004', customerName: 'Carol White', items: [{ ...MENU_ITEMS[1], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 2 }],
+    id: 'TAKE-004', items: [{ ...MENU_ITEMS[1], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 2 }],
     status: 'pending', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 4)).toISOString(), type: 'takeaway'
   },
    {
-    id: 'TAKE-005', customerName: 'David Green', items: [{ ...MENU_ITEMS[4], quantity: 1 }],
+    id: 'TAKE-005', items: [{ ...MENU_ITEMS[4], quantity: 1 }],
     status: 'ready', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 5)).setDate(5)).toISOString(), type: 'takeaway'
   }
 ];
@@ -105,7 +106,7 @@ const chartConfig = {
 export default function AdminPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeOrders, setActiveOrders] = useState<Order[]>(MOCK_ORDERS);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [selectedTableForBill, setSelectedTableForBill] = useState<string>('');
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
   const [orderForBill, setOrderForBill] = useState<Order | null>(null);
@@ -124,15 +125,25 @@ export default function AdminPage() {
       router.push('/login');
     } else {
       setCurrentUser(user);
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); // Seed if empty
+      setActiveOrders(getSharedOrders()); // Load from shared storage
       setIsMounted(true);
     }
   }, [router]);
 
-
   const calculateOrderTotal = (items: OrderItem[]) => items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   
   const formatPeriodLabel = (period: AnalyticsPeriod, start?: Date, end?: Date): string => {
-    if (!start || !end) return 'Custom range not set';
+    if (!start || !end && period === 'custom') return 'Custom range not set';
+    if (!start || !end) { // For non-custom periods where start/end might be derived later
+        switch (period) {
+            case 'today': return `Today`;
+            case 'week': return `This Week`;
+            case 'month': return `This Month`;
+            case '2months': return `Last 2 Months`;
+            default: return '';
+        }
+    }
     switch (period) {
       case 'today': return `Today (${format(start, 'MMM d')})`;
       case 'week': return `This Week (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
@@ -173,7 +184,7 @@ export default function AdminPage() {
         endDate = customEndDate ? endOfDay(customEndDate) : undefined;
         break;
       default:
-        startDate = startOfMonth(now);
+        startDate = startOfMonth(now); // Default to this month if something unexpected
     }
     
     let filteredOrders: Order[] = [];
@@ -181,17 +192,24 @@ export default function AdminPage() {
 
     if (startDate && endDate) {
       if (startDate > endDate) {
-        toast({ title: "Invalid Date Range", description: "Start date cannot be after end date.", variant: "destructive" });
+        // This toast should ideally be triggered by user action, not in useMemo
+        // Consider moving validation to where custom dates are set
         periodLabel = 'Invalid custom range';
       } else {
         filteredOrders = billedOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
-          return isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
+          return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
         periodLabel = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
       }
     } else if (selectedAnalyticsPeriod === 'custom') {
       periodLabel = 'Please select a start and end date for the custom range.';
+    } else if (startDate) { // For non-custom ranges where endDate might be implicitly now
+        periodLabel = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
+         filteredOrders = billedOrders.filter(order => {
+          const orderDate = parseISO(order.timestamp);
+          return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
+        });
     }
 
 
@@ -205,7 +223,7 @@ export default function AdminPage() {
       averageOrderValue,
       periodLabel
     };
-  }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, toast]);
+  }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate]);
 
   const monthlyChartData = useMemo(() => {
     const now = new Date();
@@ -213,6 +231,8 @@ export default function AdminPage() {
 
     billedOrders.forEach(order => {
       const orderDate = parseISO(order.timestamp);
+       if (!isValid(orderDate)) return;
+
       const monthYearStr = format(orderDate, 'MMM yyyy');
       const monthNumeric = getMonth(orderDate); 
       const year = getYear(orderDate);
@@ -224,7 +244,7 @@ export default function AdminPage() {
     });
     
     const chartDataPoints = [];
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 5; i >= 0; i--) { // Iterate for last 6 months including current
       const targetMonthDate = subMonths(now, i);
       const monthYearStr = format(targetMonthDate, 'MMM yyyy');
       if (salesByMonth[monthYearStr]) {
@@ -233,9 +253,21 @@ export default function AdminPage() {
          chartDataPoints.push({ month: monthYearStr, monthNumeric: getMonth(targetMonthDate), year: getYear(targetMonthDate), totalSales: 0 });
       }
     }
+    // Sort ensures chronological order for the chart
     return chartDataPoints.sort((a, b) => (a.year * 100 + a.monthNumeric) - (b.year * 100 + b.monthNumeric));
 
   }, [billedOrders]);
+
+  const orderDetailsForTipTool = useMemo(() => {
+    if (orderForBill && currentBill) {
+      const itemsSummary = orderForBill.items.map(item => `${item.name} (x${item.quantity})`).join(', ');
+      return `Items: ${itemsSummary}. Subtotal: $${currentBill.subtotal.toFixed(2)}. Total: $${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
+    }
+    return '';
+  }, [orderForBill, currentBill]);
+
+  // Filter out 'billed' orders for the "Active Orders" tab
+  const nonBilledOrders = useMemo(() => activeOrders.filter(order => order.status !== 'billed'), [activeOrders]);
 
 
   const handleFetchBill = () => {
@@ -243,6 +275,7 @@ export default function AdminPage() {
       toast({ title: 'Error', description: 'Please select a table to fetch the bill.', variant: 'destructive' });
       return;
     }
+    // Find unbilled dine-in order for the selected table from current activeOrders state
     const order = activeOrders.find(o => o.tableNumber === parseInt(selectedTableForBill) && o.status !== 'billed' && o.type === 'dine-in');
     if (!order) {
       toast({ title: 'No Bill Found', description: `No active, unbilled dine-in order found for table ${selectedTableForBill}.`, variant: 'destructive' });
@@ -280,18 +313,14 @@ export default function AdminPage() {
   const processPayment = () => {
     if (!currentBill || !orderForBill) return;
     setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
+    // Update the order status in the shared orders via orderManager
+    // For now, just updating local state for immediate UI feedback
     setActiveOrders(prevOrders => prevOrders.map(o => o.id === orderForBill.id ? { ...o, status: 'billed' } : o));
+    // In a full app, you would also update this in shared storage:
+    // updateSharedOrderStatus(orderForBill.id, 'billed');
     toast({ title: 'Payment Processed', description: `Bill for order ${orderForBill.id} marked as paid.`, variant: 'default' });
   };
   
-  const orderDetailsForTipTool = useMemo(() => {
-    if (orderForBill && currentBill) {
-      const itemsSummary = orderForBill.items.map(item => `${item.name} (x${item.quantity})`).join(', ');
-      return `Items: ${itemsSummary}. Subtotal: $${currentBill.subtotal.toFixed(2)}. Total: $${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
-    }
-    return '';
-  }, [orderForBill, currentBill]);
-
   if (!isMounted || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -307,10 +336,6 @@ export default function AdminPage() {
     { label: 'Last 2 Months', value: '2months' },
     { label: 'Custom Range', value: 'custom' },
   ];
-
-  // Filter out 'billed' orders for the "Active Orders" tab
-  const nonBilledOrders = useMemo(() => activeOrders.filter(order => order.status !== 'billed'), [activeOrders]);
-
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -355,7 +380,7 @@ export default function AdminPage() {
                         <TableCell className="font-medium">{order.id.slice(-6)}</TableCell>
                         <TableCell className="capitalize">{order.type}</TableCell>
                         <TableCell>
-                          {order.type === 'dine-in' ? `Table ${order.tableNumber}` : (order.customerName || 'Takeaway')}
+                          {order.type === 'dine-in' ? `Table ${order.tableNumber}` : (order.id.slice(-6) || 'Takeaway')}
                         </TableCell>
                         <TableCell>{order.items.length}</TableCell>
                         <TableCell>${calculateOrderTotal(order.items).toFixed(2)}</TableCell>
@@ -473,7 +498,14 @@ export default function AdminPage() {
                         key={period.value}
                         variant={selectedAnalyticsPeriod === period.value ? 'default' : 'outline'}
                         size="sm"
-                        onClick={() => setSelectedAnalyticsPeriod(period.value)}
+                        onClick={() => {
+                          setSelectedAnalyticsPeriod(period.value);
+                          if (period.value !== 'custom') {
+                            // Optionally reset custom dates if a predefined period is chosen
+                            // setCustomStartDate(undefined);
+                            // setCustomEndDate(undefined);
+                          }
+                        }}
                       >
                         {period.label}
                       </Button>
@@ -501,7 +533,10 @@ export default function AdminPage() {
                             <Calendar
                               mode="single"
                               selected={customStartDate}
-                              onSelect={setCustomStartDate}
+                              onSelect={(date) => {
+                                setCustomStartDate(date);
+                                if (date && customEndDate && date > customEndDate) setCustomEndDate(undefined);
+                              }}
                               initialFocus
                             />
                           </PopoverContent>
@@ -528,7 +563,7 @@ export default function AdminPage() {
                               mode="single"
                               selected={customEndDate}
                               onSelect={setCustomEndDate}
-                              disabled={(date) => customStartDate && date < customStartDate}
+                              disabled={(date) => (customStartDate && date < customStartDate) || date > new Date()}
                               initialFocus
                             />
                           </PopoverContent>
@@ -610,3 +645,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
