@@ -1,3 +1,4 @@
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -9,11 +10,13 @@ export interface OrderItem extends MenuItem {
   quantity: number;
 }
 
+export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'billed' | 'cancelled'; // Added 'cancelled' for future use
+
 export interface Order {
   id: string;
   tableNumber?: number; // Optional for takeaway
   items: OrderItem[];
-  status: 'pending' | 'preparing' | 'ready' | 'served' | 'billed';
+  status: OrderStatus;
   timestamp: string; // ISO date string
   type: 'dine-in' | 'takeaway';
   customerName?: string; // For takeaway
@@ -31,10 +34,12 @@ export interface Bill {
 }
 
 // Authentication related types
+export type UserRole = 'admin' | 'waiter' | 'kitchen';
+
 export interface User {
   id: string;
   username: string;
-  role: 'admin' | 'waiter';
+  role: UserRole;
   password?: string; // Only used during creation/storage, NOT typically exposed
 }
 

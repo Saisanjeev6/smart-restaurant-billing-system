@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ShoppingBag, Utensils, LogIn, Shield, UserCheck } from 'lucide-react'; // Added UserCheck
+import { ShoppingBag, Utensils, LogIn, Shield, UserCheck, Soup } from 'lucide-react'; // Added Soup for Kitchen
 import { AppHeader } from '@/components/layout/AppHeader';
 import { useEffect, useState } from 'react';
 import { getCurrentUser } from '@/lib/auth';
@@ -24,7 +24,6 @@ export default function Home() {
   const currentUserForRender = isMounted ? getCurrentUser() : null;
 
   if (!isMounted) {
-    // Basic loading state
     return (
       <div className="flex flex-col min-h-screen">
         <AppHeader title="Gastronomic Gatherer" />
@@ -132,30 +131,29 @@ export default function Home() {
     );
   }
 
-  // Content for other logged-in users (e.g., future roles, though unlikely to be hit with current admin/waiter logic)
-  // Shows only Takeaway tile.
-  if (currentUserForRender) {
+  // Content for logged-in KITCHEN users
+  if (currentUserForRender && currentUserForRender.role === 'kitchen') {
     return (
       <div className="flex flex-col min-h-screen bg-gradient-to-br from-background to-secondary/50">
-        <AppHeader title="Restaurant Hub" />
+        <AppHeader title="Kitchen Hub" />
         <main className="flex flex-col items-center justify-center flex-grow p-4 text-center">
-          <Utensils className="w-24 h-24 mx-auto mb-6 text-primary" />
+          <Soup className="w-24 h-24 mx-auto mb-6 text-primary" />
           <h1 className="text-4xl font-bold tracking-tight text-foreground">
-            Restaurant Hub
+            Kitchen Hub
           </h1>
           <p className="mt-3 text-lg text-muted-foreground max-w-xl">
-            Manage your takeaway orders efficiently.
+            View and manage incoming food orders.
           </p>
           <div className="grid grid-cols-1 max-w-xs gap-6 mt-10 mx-auto">
             <Card className="transition-all duration-300 ease-in-out shadow-lg hover:shadow-xl hover:scale-105">
               <CardHeader className="items-center text-center">
-                <ShoppingBag className="w-12 h-12 mb-3 text-accent" />
-                <CardTitle className="text-2xl">Takeaway Orders</CardTitle>
-                <CardDescription>Process and manage takeaway sales.</CardDescription>
+                <Soup className="w-12 h-12 mb-3 text-primary" />
+                <CardTitle className="text-2xl">Kitchen Console</CardTitle>
+                <CardDescription>View and process orders.</CardDescription>
               </CardHeader>
               <CardContent className="text-center">
                 <Button asChild size="lg" className="w-full">
-                  <Link href="/takeaway">Go to Takeaway</Link>
+                  <Link href="/kitchen">Go to Kitchen Console</Link>
                 </Button>
               </CardContent>
             </Card>

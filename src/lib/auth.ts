@@ -1,13 +1,14 @@
+
 // IMPORTANT: This is a simplified auth system for prototyping purposes only.
 // It stores passwords in plaintext in localStorage, which is INSECURE for production.
 // DO NOT use this approach in a real application.
 
 'use client'; // This module interacts with localStorage, so it's client-side.
 
-import type { User, NewUserCredentials } from '@/types'; // Assuming User type will be expanded
+import type { User, NewUserCredentials, UserRole } from '@/types'; // Assuming User type will be expanded
 
-const USERS_KEY = 'restaurant_users_v2'; // Changed key to reset if old one exists
-const CURRENT_USER_KEY = 'restaurant_current_user_v2';
+const USERS_KEY = 'restaurant_users_v3'; // Incremented key for new role
+const CURRENT_USER_KEY = 'restaurant_current_user_v3'; // Incremented key
 
 const getStoredUsers = (): User[] => {
   if (typeof window === 'undefined') return [];
@@ -18,10 +19,23 @@ const getStoredUsers = (): User[] => {
 const initializeUsers = () => {
   if (typeof window === 'undefined') return;
   let users = getStoredUsers();
-  if (users.length === 0) {
+  if (!users.find(u => u.username === 'admin')) {
     users.push({ username: 'admin', password: 'admin', role: 'admin', id: 'user-admin-01' });
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
   }
+  if (!users.find(u => u.username === 'kitchen')) {
+    users.push({ username: 'kitchen', password: 'kitchen', role: 'kitchen', id: 'user-kitchen-01' });
+  }
+  // Ensure existing users are preserved, only add if missing.
+  const uniqueUsers = users.reduce((acc, current) => {
+    const x = acc.find(item => item.username === current.username);
+    if (!x) {
+      return acc.concat([current]);
+    } else {
+      return acc;
+    }
+  }, [] as User[]);
+
+  localStorage.setItem(USERS_KEY, JSON.stringify(uniqueUsers));
 };
 
 // Initialize on module load (client-side only)
@@ -56,8 +70,8 @@ export const getCurrentUser = (): User | null => {
 
 export const createUser = (newUser: NewUserCredentials): { success: boolean; message: string; users?: User[] } => {
   if (typeof window === 'undefined') return { success: false, message: 'localStorage not available' };
-  if (newUser.role === 'admin') {
-    return { success: false, message: 'Cannot create admin users through this interface.' };
+  if (newUser.role !== 'waiter') { // Only allow creating waiters for now via this function
+    return { success: false, message: 'Can only create waiter accounts through this interface.' };
   }
 
   const users = getStoredUsers();
@@ -71,7 +85,7 @@ export const createUser = (newUser: NewUserCredentials): { success: boolean; mes
   };
   users.push(userWithId);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  return { success: true, message: `${newUser.role} created successfully.`, users: users.filter(u => u.role !== 'admin') };
+  return { success: true, message: `${newUser.role} created successfully.`, users: users.filter(u => u.role === 'waiter') }; // Return only waiters
 };
 
 export const getUsers = (role?: 'waiter'): User[] => {
@@ -80,5 +94,5 @@ export const getUsers = (role?: 'waiter'): User[] => {
   if (role) {
     return users.filter(u => u.role === role);
   }
-  return users.filter(u => u.role !== 'admin'); // By default, don't show admin details
+  return users.filter(u => u.role === 'waiter'); // By default, only show waiters
 };

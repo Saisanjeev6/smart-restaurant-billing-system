@@ -27,8 +27,11 @@ export default function LoginPage() {
         router.push('/admin');
       } else if (user.role === 'waiter') {
         router.push('/waiter');
-      } else {
-        router.push('/'); // Fallback to home for unknown roles or if preferred
+      } else if (user.role === 'kitchen') {
+        router.push('/kitchen');
+      }
+       else {
+        router.push('/'); 
       }
     }
   }, [router]);
@@ -45,8 +48,9 @@ export default function LoginPage() {
         router.push('/admin');
       } else if (user.role === 'waiter') {
         router.push('/waiter');
+      } else if (user.role === 'kitchen') {
+        router.push('/kitchen');
       } else {
-        // Fallback for other roles or if no specific redirect is defined
         router.push('/');
       }
     } else {
