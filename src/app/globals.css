@@ -108,31 +108,110 @@
 }
 
 @media print {
-  body > div > header, /* AppHeader */
-  main > div.grid > div:first-child, /* Hides the order creation card (left column) */
-  main > div.grid > div#takeaway-right-column > #current-order-summary-card /* Hides summary card if bill exists and is not the one being printed */
-   {
+  body > div#admin-page-container > header, /* AppHeader */
+  body > div#admin-page-container > main > div > div.grid.w-full.grid-cols-1.mb-6.md\:grid-cols-5, /* TabsList */
+  body > div#admin-page-container > main > div > div > div > div#admin-bill-fetch-card, /* Bill Fetch Card */
+  body > div#admin-page-container > main > div > div > div > div#admin-final-bill-card .card-footer button:not([aria-label*="Print"]), /* Hide non-print buttons in bill card footer */
+  body > div#admin-page-container > main > div > div > div > div#admin-final-bill-card .flex.items-end.gap-2, /* Hide discount input */
+  #admin-final-bill-card .card-footer button[aria-label*="Process Payment"],
+  #admin-final-bill-card .card-footer button:not(.print-button-class), /* Example if you add a specific class for print button */
+  .hide-on-print {
     display: none !important;
   }
 
-  main > div.grid > div#takeaway-right-column { /* Make the wrapper of the final bill card take over print layout */
+  body > div#admin-page-container > main > div > div > div > div#admin-final-bill-card { /* Target the bill card itself */
     visibility: visible !important;
     position: absolute !important;
     left: 0 !important;
     top: 0 !important;
     width: 100% !important;
-    padding: 0 !important; /* Wrapper itself no padding */
-    margin: 0 !important;
-    background-color: white !important; /* Ensure background for the whole print area is white */
+    max-width: none !important;
+    margin: 0 auto !important;
+    padding: 15px !important;
+    box-shadow: none !important;
+    border: 1px solid #aaa !important;
+    font-size: 10pt !important;
+    background-color: white !important;
+    color: black !important;
+  }
+  
+  #admin-final-bill-card .card-header,
+  #admin-final-bill-card .card-content,
+  #admin-final-bill-card .card-footer {
+    padding: 8px !important;
+    background-color: white !important;
+    color: black !important;
   }
 
-  #final-bill-card-takeaway { /* The bill card itself */
+  #admin-final-bill-card .card-title {
+    font-size: 14pt !important;
+    color: black !important;
+    margin-bottom: 0.5rem !important;
+  }
+  #admin-final-bill-card .card-description,
+  #admin-final-bill-card .text-sm,
+  #admin-final-bill-card p {
+    font-size: 10pt !important;
+    color: black !important;
+    line-height: 1.4 !important;
+  }
+   #admin-final-bill-card .text-muted-foreground {
+      color: #333 !important; 
+   }
+
+  #admin-final-bill-card .font-semibold { font-weight: 600 !important; }
+  #admin-final-bill-card .font-bold { font-weight: 700 !important; }
+
+  #admin-final-bill-card hr,
+  #admin-final-bill-card .separator {
+    border-color: #999 !important;
+    background-color: #999 !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+  
+  #admin-final-bill-card [class*="text-primary"],
+  #admin-final-bill-card [class*="text-destructive"],
+  #admin-final-bill-card [class*="text-orange-"],
+  #admin-final-bill-card [class*="text-green-"] {
+      color: black !important;
+  }
+
+  #admin-final-bill-card svg {
+      /* display: none !important; */
+      color: black !important;
+      fill: black !important;
+      width: 1em !important;
+      height: 1em !important;
+  }
+
+  /* Takeaway Bill Print Styles - Keep these separate */
+  body > div > header#takeaway-header,
+  main > div.grid > div:first-child, /* Hides the order creation card (left column on takeaway) */
+  main > div.grid > div#takeaway-right-column > #current-order-summary-card,
+  #final-bill-card-takeaway .card-footer button:not([aria-label*="Print"])
+  {
+    display: none !important;
+  }
+
+  main > div.grid > div#takeaway-right-column {
+    visibility: visible !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background-color: white !important;
+  }
+
+  #final-bill-card-takeaway { 
     width: 100% !important; 
     max-width: none !important;
     margin: 0 auto !important;
-    padding: 15px !important; /* Overall padding for the bill card content area */
+    padding: 15px !important;
     box-shadow: none !important;
-    border: 1px solid #aaa !important; /* Light border for definition */
+    border: 1px solid #aaa !important;
     font-size: 10pt !important;
     background-color: white !important;
     color: black !important;
@@ -141,7 +220,7 @@
   #final-bill-card-takeaway .card-header,
   #final-bill-card-takeaway .card-content,
   #final-bill-card-takeaway .card-footer {
-    padding: 8px !important; /* Tighter padding for sections within the card */
+    padding: 8px !important;
     background-color: white !important;
     color: black !important;
   }
@@ -164,21 +243,20 @@
 
   #final-bill-card-takeaway .font-semibold { font-weight: 600 !important; }
   #final-bill-card-takeaway .font-bold { font-weight: 700 !important; }
-
+  
   #final-bill-card-takeaway button,
-  #final-bill-card-takeaway .hide-on-print { /* Generic class to hide elements if needed */
+  #final-bill-card-takeaway .hide-on-print { 
     display: none !important;
   }
 
   #final-bill-card-takeaway hr,
-  #final-bill-card-takeaway .separator { /* Target Separator component */
+  #final-bill-card-takeaway .separator { 
     border-color: #999 !important;
     background-color: #999 !important;
     margin-top: 0.5rem !important;
     margin-bottom: 0.5rem !important;
   }
   
-  /* Ensure specific themed text colors are overridden for print legibility */
   #final-bill-card-takeaway [class*="text-primary"],
   #final-bill-card-takeaway [class*="text-destructive"],
   #final-bill-card-takeaway [class*="text-orange-"],
@@ -186,12 +264,12 @@
       color: black !important;
   }
 
-  /* Optional: Style or hide icons for print */
   #final-bill-card-takeaway svg {
-      /* display: none !important; */ /* Option 1: Hide all icons */
-      color: black !important; /* Option 2: Make icons black if visible */
-      fill: black !important; /* If they use fill property */
-      width: 1em !important; /* Standardize icon size if shown */
+      /* display: none !important; */
+      color: black !important;
+      fill: black !important;
+      width: 1em !important;
       height: 1em !important;
   }
 }
+

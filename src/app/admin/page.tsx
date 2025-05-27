@@ -17,7 +17,7 @@ import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageWaitersTool } from './components/ManageWaitersTool';
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing } from 'lucide-react';
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
 import { getSharedOrders, initializeSharedOrdersWithMockData, updateSharedOrderStatus } from '@/lib/orderManager';
@@ -30,19 +30,18 @@ import { cn } from "@/lib/utils"
 import { Badge } from '@/components/ui/badge';
 
 
-// Enhanced Mock orders data for analytics and active orders display
 const MOCK_ORDERS_SEED: Order[] = [
   {
     id: 'ORD-1001', tableNumber: 3, items: [{ ...MENU_ITEMS[0], quantity: 2 }, { ...MENU_ITEMS[2], quantity: 1 }],
-    status: 'billed', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'paid', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
     id: 'ORD-1002', tableNumber: 5, items: [{ ...MENU_ITEMS[3], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }],
-    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
     id: 'TAKE-001', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[7], quantity: 1 }],
-    status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway' // 3 mins ago
+    status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway' 
   },
   {
     id: 'ORD-1004', tableNumber: 1, items: [{ ...MENU_ITEMS[1], quantity: 1 }, { ...MENU_ITEMS[5], quantity: 1 }],
@@ -50,7 +49,7 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'TAKE-002', items: [{ ...MENU_ITEMS[0], quantity: 2 }],
-    status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway' // 5 mins ago
+    status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway' 
   },
   {
     id: 'ORD-1005', items: [{ ...MENU_ITEMS[0], quantity: 2 }], 
@@ -58,15 +57,15 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'ORD-1006', tableNumber: 4, items: [{ ...MENU_ITEMS[2], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }],
-    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), type: 'dine-in'
+    status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
     id: 'TAKE-003', items: [{ ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 1 }],
-    status: 'billed', timestamp: new Date(Date.now() - 600000).toISOString(), type: 'takeaway' 
+    status: 'paid', timestamp: new Date(Date.now() - 600000).toISOString(), type: 'takeaway' 
   },
   {
     id: 'ORD-1007', tableNumber: 7, items: [{ ...MENU_ITEMS[3], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 1 }],
-    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in'
+    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in'
   },
    {
     id: 'ORD-1008', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }],
@@ -74,15 +73,15 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'ORD-1009', tableNumber: 2, items: [{ ...MENU_ITEMS[0], quantity: 1 }],
-    status: 'billed', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in'
+    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in'
   },
    {
     id: 'ORD-1010', tableNumber: 6, items: [{ ...MENU_ITEMS[5], quantity: 2 }],
-    status: 'billed', timestamp: new Date().toISOString(), type: 'dine-in'
+    status: 'paid', timestamp: new Date().toISOString(), type: 'dine-in'
   },
   {
     id: 'ORD-1011', tableNumber: 8, items: [{ ...MENU_ITEMS[9], quantity: 1 }],
-    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in'
+    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in'
   },
   {
     id: 'TAKE-004', items: [{ ...MENU_ITEMS[1], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 2 }],
@@ -114,6 +113,7 @@ export default function AdminPage() {
   const [discountPercentage, setDiscountPercentage] = useState<number>(0);
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
+  const [displayedBillRequestNotifications, setDisplayedBillRequestNotifications] = useState<Set<string>>(new Set());
 
   const [selectedAnalyticsPeriod, setSelectedAnalyticsPeriod] = useState<AnalyticsPeriod>('month');
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
@@ -148,11 +148,11 @@ export default function AdminPage() {
     }
   }, []);
 
-  const billedOrders = useMemo(() => allOrders.filter(order => order.status === 'billed'), [allOrders]);
+  const paidOrders = useMemo(() => allOrders.filter(order => order.status === 'paid'), [allOrders]);
   
-  const nonBilledOrders = useMemo(() => {
+  const activeOrdersList = useMemo(() => { // Renamed from nonBilledOrders for clarity
       return allOrders
-        .filter(order => order.status !== 'billed' && order.status !== 'cancelled')
+        .filter(order => order.status !== 'paid' && order.status !== 'cancelled')
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   }, [allOrders]);
 
@@ -190,7 +190,7 @@ export default function AdminPage() {
       if (startDate > endDate) {
         periodLabelValue = 'Invalid custom range';
       } else {
-        filteredOrders = billedOrders.filter(order => {
+        filteredOrders = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
           return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
@@ -200,7 +200,7 @@ export default function AdminPage() {
       periodLabelValue = 'Please select a start and end date for the custom range.';
     } else if (startDate) { 
         periodLabelValue = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
-         filteredOrders = billedOrders.filter(order => {
+         filteredOrders = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
           return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
@@ -216,12 +216,12 @@ export default function AdminPage() {
       averageOrderValue,
       periodLabel: periodLabelValue
     };
-  }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, formatPeriodLabel, calculateOrderTotal]);
+  }, [paidOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, formatPeriodLabel, calculateOrderTotal]);
 
   const monthlyChartData = useMemo(() => {
     const salesByMonth: { [monthYear: string]: { month: string, monthNumeric: number, year: number, totalSales: number } } = {};
 
-    billedOrders.forEach(order => {
+    paidOrders.forEach(order => {
       const orderDate = parseISO(order.timestamp);
        if (!isValid(orderDate)) return;
 
@@ -248,7 +248,7 @@ export default function AdminPage() {
     }
     return chartDataPoints.sort((a, b) => (a.year * 100 + a.monthNumeric) - (b.year * 100 + b.monthNumeric));
 
-  }, [billedOrders, calculateOrderTotal]);
+  }, [paidOrders, calculateOrderTotal]);
 
   const orderDetailsForTipTool = useMemo(() => {
     if (orderForBill && currentBill) {
@@ -261,8 +261,28 @@ export default function AdminPage() {
 
   const loadAllOrders = useCallback(() => {
     if(!isMounted) return;
-    setAllOrders(getSharedOrders());
-  }, [isMounted]);
+    const ordersFromStorage = getSharedOrders();
+    setAllOrders(ordersFromStorage);
+
+    // Bill Request Notifications
+    const billRequests = ordersFromStorage.filter(
+        order => order.status === 'bill_requested' && !displayedBillRequestNotifications.has(order.id)
+    );
+
+    if (billRequests.length > 0) {
+        const newNotifications = new Set(displayedBillRequestNotifications);
+        billRequests.forEach(order => {
+            toast({
+                title: 'Bill Requested',
+                description: `Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) requests billing. Please process in Bill Management.`,
+                duration: 10000,
+            });
+            newNotifications.add(order.id);
+        });
+        setDisplayedBillRequestNotifications(newNotifications);
+    }
+
+  }, [isMounted, toast, displayedBillRequestNotifications]);
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -270,7 +290,7 @@ export default function AdminPage() {
       router.push('/login');
     } else {
       setCurrentUser(user);
-      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); // Seed only if empty
       setIsMounted(true); 
     }
   }, [router]);
@@ -278,7 +298,7 @@ export default function AdminPage() {
   useEffect(() => {
     if(isMounted){ 
         loadAllOrders();
-        const intervalId = setInterval(loadAllOrders, 5000); 
+        const intervalId = setInterval(loadAllOrders, 7000); // Refresh interval
         return () => clearInterval(intervalId);
     }
   }, [isMounted, loadAllOrders]);
@@ -289,9 +309,15 @@ export default function AdminPage() {
       return;
     }
     
-    const order = allOrders.find(o => o.tableNumber === parseInt(selectedTableForBill) && o.status !== 'billed' && o.status !== 'cancelled' && o.type === 'dine-in');
+    const tableNum = parseInt(selectedTableForBill);
+    let order = allOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status === 'bill_requested');
+    
+    if (!order) { // Fallback to any active, unbilled/unpaid order
+      order = allOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled');
+    }
+
     if (!order) {
-      toast({ title: 'No Bill Found', description: `No active, unbilled dine-in order found for table ${selectedTableForBill}.`, variant: 'destructive' });
+      toast({ title: 'No Bill Found', description: `No active, unbilled/unpaid dine-in order found for table ${selectedTableForBill}.`, variant: 'destructive' });
       setCurrentBill(null);
       setOrderForBill(null);
       return;
@@ -309,10 +335,10 @@ export default function AdminPage() {
       taxAmount,
       discountAmount: 0,
       totalAmount,
-      paymentStatus: 'pending',
+      paymentStatus: order.status === 'paid' ? 'paid' : 'pending',
     });
     setDiscountPercentage(0); 
-    toast({ title: 'Bill Fetched', description: `Bill for table ${selectedTableForBill} is ready.` });
+    toast({ title: 'Bill Fetched', description: `Bill for table ${selectedTableForBill} is ready. Current order status: ${order.status.replace('_', ' ')}` });
   };
 
   const applyDiscount = () => {
@@ -326,27 +352,38 @@ export default function AdminPage() {
   const processPayment = () => {
     if (!currentBill || !orderForBill) return;
     
-    const success = updateSharedOrderStatus(orderForBill.id, 'billed');
+    const success = updateSharedOrderStatus(orderForBill.id, 'paid'); // Mark as 'paid'
     if(success) {
       setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
       toast({ title: 'Payment Processed', description: `Bill for order ${orderForBill.id.slice(-6)} marked as paid.`, variant: 'default' });
+      // Clear fields after payment
       setOrderForBill(null); 
       setCurrentBill(null); 
       setSelectedTableForBill(''); 
       setDiscountPercentage(0);
-      // loadAllOrders(); // Data will be reloaded by interval
+      loadAllOrders(); // Explicitly refresh orders
     } else {
       toast({ title: 'Error', description: `Failed to process payment for order ${orderForBill.id.slice(-6)}.`, variant: 'destructive' });
     }
   };
   
+  const handlePrintAdminBill = () => {
+    if (currentBill && orderForBill) {
+      window.print();
+    } else {
+      toast({ title: 'Error', description: 'No bill loaded to print.', variant: 'destructive' });
+    }
+  };
+
   const getStatusBadgeClass = (status: Order['status']): string => {
     switch (status) {
       case 'pending': return 'bg-blue-100 text-blue-700 border-blue-300';
       case 'preparing': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
-      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300';
+      case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
+      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300'; // Legacy status, might be phased out for 'paid'
+      case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
   };
@@ -368,7 +405,7 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen" id="admin-page-container">
       <AppHeader title="Admin Dashboard" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orders" className="w-full">
@@ -384,13 +421,13 @@ export default function AdminPage() {
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle>Manage Active Orders</CardTitle>
-                <CardDescription>View and manage all current (unbilled) restaurant orders, including dine-in and takeaway. Refreshing every 5 seconds.</CardDescription>
+                <CardDescription>View and manage all current (unpaid) restaurant orders. Refreshing every 7 seconds.</CardDescription>
               </CardHeader>
               <CardContent>
-                {nonBilledOrders.length === 0 ? (
+                {activeOrdersList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                         <Image src="https://placehold.co/400x250.png" alt="Restaurant scene" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant people" />
-                        <p>No active (unbilled) orders at the moment.</p>
+                        <p>No active (unpaid) orders at the moment.</p>
                     </div>
                 ) : (
                 <Table>
@@ -406,7 +443,7 @@ export default function AdminPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {nonBilledOrders.map(order => (
+                    {activeOrdersList.map(order => (
                       <TableRow key={order.id}>
                         <TableCell className="font-medium">{order.id.slice(-6)}</TableCell>
                         <TableCell className="capitalize">{order.type}</TableCell>
@@ -420,7 +457,7 @@ export default function AdminPage() {
                         <TableCell>
                            <Badge variant="outline" className={`${getStatusBadgeClass(order.status)} capitalize font-medium`}>
                             {order.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
-                            {order.status}
+                            {order.status.replace('_', ' ')}
                           </Badge>
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
@@ -437,7 +474,7 @@ export default function AdminPage() {
 
           <TabsContent value="billing">
             <div className="grid gap-6 md:grid-cols-2">
-              <Card className="shadow-lg">
+              <Card className="shadow-lg" id="admin-bill-fetch-card">
                 <CardHeader>
                   <CardTitle>Finalize Dine-in Bill</CardTitle>
                   <CardDescription>Select a table to generate and finalize their bill. Takeaway bills are managed on the Takeaway page.</CardDescription>
@@ -461,10 +498,10 @@ export default function AdminPage() {
               </Card>
 
               {orderForBill && currentBill && (
-                <Card className="shadow-lg">
+                <Card className="shadow-lg" id="admin-final-bill-card">
                   <CardHeader>
                     <CardTitle>Bill for Table {orderForBill.tableNumber} (Order {orderForBill.id.slice(-6)})</CardTitle>
-                    <CardDescription>Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus}</span></CardDescription>
+                    <CardDescription>Order Status: <Badge variant="outline" className={`${getStatusBadgeClass(orderForBill.status)} capitalize`}>{orderForBill.status.replace('_',' ')}</Badge> | Payment Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus}</span></CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <ul className="space-y-1 text-sm max-h-40 overflow-y-auto">
@@ -497,11 +534,14 @@ export default function AdminPage() {
                       </>
                     )}
                   </CardContent>
-                  {currentBill.paymentStatus === 'pending' && (
-                    <CardFooter>
+                  <CardFooter className="flex-col gap-2">
+                    {currentBill.paymentStatus === 'pending' && (
                       <Button onClick={processPayment} className="w-full" size="lg"><CreditCard className="mr-2 h-4 w-4" /> Process Payment</Button>
-                    </CardFooter>
-                  )}
+                    )}
+                     <Button onClick={handlePrintAdminBill} className="w-full" variant="outline" size="lg" disabled={!currentBill}>
+                        <Printer className="mr-2 h-4 w-4" /> Print Bill
+                     </Button>
+                  </CardFooter>
                 </Card>
               )}
             </div>
@@ -598,7 +638,6 @@ export default function AdminPage() {
                     </div>
                   )}
                 </div>
-
 
                 <div className="grid gap-4 md:grid-cols-3">
                   <Card className="bg-card/50">

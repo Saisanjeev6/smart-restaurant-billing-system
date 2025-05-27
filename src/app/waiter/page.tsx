@@ -38,7 +38,7 @@ export default function WaiterPage() {
   const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [sessionOrders, setSessionOrders] = useState<Order[]>([]); 
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]); 
   const { toast } = useToast();
   
   const [isBillConfirmOpen, setIsBillConfirmOpen] = useState(false);
@@ -50,12 +50,11 @@ export default function WaiterPage() {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, []);
 
-  const loadSessionOrders = useCallback(() => {
+  const loadActiveOrders = useCallback(() => {
     if (!isMounted) return;
     const orders = getSharedOrders();
-    setSessionOrders(orders);
+    setActiveOrders(orders);
 
-    // Check for ready orders for this waiter
     if(currentUser) {
       const readyOrdersForThisWaiter = orders.filter(
         order => order.status === 'ready' && order.waiterId === currentUser.id && !displayedReadyNotifications.has(order.id)
@@ -68,19 +67,18 @@ export default function WaiterPage() {
             title: 'Order Ready!',
             description: `Order for ${order.type === 'dine-in' ? `Table ${order.tableNumber}` : `Token ${order.id.slice(-6)}`} is ready for pickup.`,
             variant: 'default', 
-            duration: 7000, // Keep toast a bit longer
+            duration: 7000,
           });
           newNotifications.add(order.id);
         });
         setDisplayedReadyNotifications(newNotifications);
       }
     }
-
   }, [isMounted, currentUser, toast, displayedReadyNotifications]);
 
   useEffect(() => {
     const user = getCurrentUser();
-    if (!user || (user.role !== 'waiter' && user.role !== 'admin')) { // Admin can also access waiter page
+    if (!user || (user.role !== 'waiter' && user.role !== 'admin')) {
       router.push('/login');
     } else {
       setCurrentUser(user);
@@ -90,26 +88,24 @@ export default function WaiterPage() {
 
   useEffect(() => {
     if(isMounted){
-        loadSessionOrders();
-        const intervalId = setInterval(loadSessionOrders, 7000); // Check for ready orders every 7 seconds
+        loadActiveOrders();
+        const intervalId = setInterval(loadActiveOrders, 7000); 
         return () => clearInterval(intervalId);
     }
-  }, [isMounted, loadSessionOrders]);
-
+  }, [isMounted, loadActiveOrders]);
 
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
-    // Find order that is not 'billed' or 'cancelled' for this table
-    return sessionOrders.find(o => o.tableNumber === tableNum && o.status !== 'billed' && o.status !== 'cancelled');
-  }, [selectedTable, sessionOrders, isMounted]);
+    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
+  }, [selectedTable, activeOrders, isMounted]);
 
   const allUnbilledOrdersList = useMemo(() => {
     if (!isMounted) return [];
-    return sessionOrders
-      .filter(order => order.type === 'dine-in' && order.status !== 'billed' && order.status !== 'cancelled')
+    return activeOrders
+      .filter(order => order.type === 'dine-in' && order.status !== 'billed' && order.status !== 'paid' && order.status !== 'cancelled')
       .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
-  }, [sessionOrders, isMounted]);
+  }, [activeOrders, isMounted]);
   
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
 
@@ -156,10 +152,10 @@ export default function WaiterPage() {
     const tableNum = parseInt(selectedTable);
     let orderToUpdate: Order;
 
-    const existingOrder = sessionOrders.find(o => o.tableNumber === tableNum && o.status === 'pending');
+    const existingPendingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
 
-    if (existingOrder) {
-      orderToUpdate = { ...existingOrder };
+    if (existingPendingOrder) {
+      orderToUpdate = { ...existingPendingOrder };
       
       const updatedItemsMap = new Map<string, OrderItem>();
       orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item})); 
@@ -173,9 +169,10 @@ export default function WaiterPage() {
         }
       });
       orderToUpdate.items = Array.from(updatedItemsMap.values());
-      orderToUpdate.timestamp = new Date().toISOString(); // Update timestamp on modification
-      toast({ title: 'Order Updated', description: `Items added to Table ${selectedTable}. Sent to kitchen.` });
-    } else { // No existing 'pending' order, create a new one
+      orderToUpdate.timestamp = new Date().toISOString();
+      orderToUpdate.status = 'pending'; // Ensure it goes back to pending if it was 'ready' or 'served'
+      toast({ title: 'Order Updated', description: `Items added/updated for Table ${selectedTable}. Sent to kitchen.` });
+    } else { 
       orderToUpdate = {
         id: `ORD-${Date.now()}`,
         tableNumber: tableNum,
@@ -190,69 +187,58 @@ export default function WaiterPage() {
     }
     
     addOrUpdateSharedOrder(orderToUpdate);
-    setCurrentOrderItems([]); // Clear current selection after submitting
-    // setSelectedTable(''); // Keep table selected for further additions or bill generation
-    loadSessionOrders(); 
+    setCurrentOrderItems([]); 
+    loadActiveOrders(); 
   };
 
   const handleGenerateBillRequest = () => { 
     if (!pendingOrderForSelectedTable) { 
-      toast({ title: 'Error', description: `No pending order found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
+      toast({ title: 'Error', description: `No active order found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
       return;
     }
     setOrderForBillConfirmation(pendingOrderForSelectedTable);
     setIsBillConfirmOpen(true);
   };
 
-  const confirmAndGenerateBill = () => {
+  const confirmAndSendToBilling = () => {
     if (!orderForBillConfirmation) return;
 
-    const success = updateSharedOrderStatus(orderForBillConfirmation.id, 'billed');
+    const success = updateSharedOrderStatus(orderForBillConfirmation.id, 'bill_requested');
     
     if (success) {
       const subtotal = calculateSubtotal(orderForBillConfirmation.items);
       toast({ 
-        title: 'Bill Generated', 
-        description: `Bill for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) sent to admin/billing. Table cleared.` 
+        title: 'Bill Requested', 
+        description: `Bill request for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) sent. Admin notified.` 
       });
-      loadSessionOrders();
+      loadActiveOrders();
     } else {
-      toast({ title: 'Error', description: 'Failed to generate bill.', variant: 'destructive' });
+      toast({ title: 'Error', description: 'Failed to request bill.', variant: 'destructive' });
     }
     
     setCurrentOrderItems([]); 
     if (selectedTable === String(orderForBillConfirmation.tableNumber)) {
-      setSelectedTable(''); 
+      // Keep table selected to see its status change
     }
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
   };
 
   const canSubmitCurrentSelection = selectedTable && currentOrderItems.length > 0;
-  const canGenerateBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0;
+  const canGenerateBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 && (pendingOrderForSelectedTable.status !== 'bill_requested' && pendingOrderForSelectedTable.status !== 'billed' && pendingOrderForSelectedTable.status !== 'paid');
 
-  const getStatusBadgeVariant = (status: Order['status']): "default" | "secondary" | "destructive" => {
-    switch (status) {
-      case 'pending': return 'default'; // Often blue or primary
-      case 'preparing': return 'secondary'; // Yellow/Orange
-      case 'ready': return 'default'; // Green
-      case 'served': return 'secondary'; // Purple/Gray
-      case 'billed': return 'secondary';
-      default: return 'outline';
-    }
-  };
-  
   const getStatusBadgeClass = (status: Order['status']): string => {
     switch (status) {
       case 'pending': return 'bg-blue-500 text-white';
       case 'preparing': return 'bg-yellow-500 text-black';
-      case 'ready': return 'bg-green-500 text-white animate-pulse'; // Added pulse for ready
+      case 'ready': return 'bg-green-500 text-white animate-pulse';
       case 'served': return 'bg-purple-500 text-white';
-      case 'billed': return 'bg-gray-400 text-black';
+      case 'bill_requested': return 'bg-orange-500 text-white';
+      case 'billed': return 'bg-gray-400 text-black'; // Might not be used much by waiter
+      case 'paid': return 'bg-teal-500 text-white'; // Might not be used much by waiter
       default: return 'bg-gray-200 text-gray-700';
     }
   };
-
 
   if (!isMounted || !currentUser) {
     return (
@@ -269,7 +255,7 @@ export default function WaiterPage() {
         <Tabs defaultValue="orderManagement" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6">
             <TabsTrigger value="orderManagement" className="flex items-center gap-2"><ClipboardEdit /> Order Management</TabsTrigger>
-            <TabsTrigger value="allPending" className="flex items-center gap-2"><ListOrdered /> All Active Orders</TabsTrigger>
+            <TabsTrigger value="allActiveOrders" className="flex items-center gap-2"><ListOrdered /> All Active Orders</TabsTrigger>
           </TabsList>
 
           <TabsContent value="orderManagement">
@@ -375,9 +361,10 @@ export default function WaiterPage() {
                    <CardHeader>
                     <CardTitle className="text-xl flex items-center justify-between">
                       {selectedTable ? `Active Order for Table ${selectedTable}` : "Select Table to View Order"}
-                      {pendingOrderForSelectedTable?.status === 'ready' && (
+                      {pendingOrderForSelectedTable?.status && (
                         <Badge className={`${getStatusBadgeClass(pendingOrderForSelectedTable.status)} capitalize`}>
-                          <BellRing className="w-4 h-4 mr-1" /> Ready
+                          {pendingOrderForSelectedTable.status === 'ready' && <BellRing className="w-4 h-4 mr-1" />}
+                          {pendingOrderForSelectedTable.status.replace('_', ' ')}
                         </Badge>
                       )}
                     </CardTitle>
@@ -385,8 +372,6 @@ export default function WaiterPage() {
                     {selectedTable && pendingOrderForSelectedTable && 
                         <CardDescription>
                             Total subtotal: ${calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}
-                            {pendingOrderForSelectedTable.status !== 'ready' && pendingOrderForSelectedTable.status !== 'pending' && 
-                             <span className="ml-2 capitalize font-semibold">({pendingOrderForSelectedTable.status})</span>}
                         </CardDescription>
                     }
                   </CardHeader>
@@ -408,9 +393,9 @@ export default function WaiterPage() {
                       <p className="text-muted-foreground text-center py-4">No items submitted to kitchen for Table {selectedTable} yet.</p>
                     )}
                   </CardContent>
-                  {selectedTable && pendingOrderForSelectedTable && pendingOrderForSelectedTable.status !== 'billed' && pendingOrderForSelectedTable.status !== 'cancelled' && (
+                  {selectedTable && pendingOrderForSelectedTable && canGenerateBillForSelectedTable && (
                     <CardFooter>
-                       <Button onClick={handleGenerateBillRequest} className="w-full" variant="outline" disabled={!canGenerateBillForSelectedTable}>
+                       <Button onClick={handleGenerateBillRequest} className="w-full" variant="outline">
                           <ReceiptText className="mr-2" /> Request Bill for Table {selectedTable}
                         </Button>
                     </CardFooter>
@@ -420,11 +405,11 @@ export default function WaiterPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="allPending">
+          <TabsContent value="allActiveOrders">
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> All Active Dine-in Orders</CardTitle>
-                <CardDescription>Overview of all unbilled dine-in orders. Refreshing for status updates.</CardDescription>
+                <CardDescription>Overview of all dine-in orders not yet paid. Refreshing for status updates.</CardDescription>
               </CardHeader>
               <CardContent>
                 {allUnbilledOrdersList.length === 0 ? (
@@ -443,7 +428,7 @@ export default function WaiterPage() {
                           </div>
                            <Badge className={`${getStatusBadgeClass(order.status)} capitalize`}>
                             {order.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
-                            {order.status}
+                            {order.status.replace('_', ' ')}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground mb-1">
@@ -473,9 +458,9 @@ export default function WaiterPage() {
           <AlertDialog open={isBillConfirmOpen} onOpenChange={setIsBillConfirmOpen}>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Confirm Bill for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
+                <AlertDialogTitle>Confirm Bill Request for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will finalize and mark the order for Table {orderForBillConfirmation.tableNumber} as 'billed'. The bill will then be handled by Admin for payment processing. This action cannot be undone from the waiter interface.
+                  This will notify the admin that Table {orderForBillConfirmation.tableNumber} is ready for billing. The order status will be changed to 'Bill Requested'.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
@@ -492,7 +477,7 @@ export default function WaiterPage() {
               </div>
               <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => { setIsBillConfirmOpen(false); setOrderForBillConfirmation(null); }}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmAndGenerateBill}>Confirm & Send to Billing</AlertDialogAction>
+                <AlertDialogAction onClick={confirmAndSendToBilling}>Confirm & Request Bill</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

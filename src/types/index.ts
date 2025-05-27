@@ -10,7 +10,7 @@ export interface OrderItem extends MenuItem {
   quantity: number;
 }
 
-export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'billed' | 'cancelled'; // Added 'cancelled' for future use
+export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'bill_requested' | 'billed' | 'paid' | 'cancelled';
 
 export interface Order {
   id: string;
@@ -32,7 +32,7 @@ export interface Bill {
   taxAmount: number;
   discountAmount: number;
   totalAmount: number;
-  paymentStatus: 'pending' | 'paid';
+  paymentStatus: 'pending' | 'paid'; // 'paid' explicitly means payment processed by admin
 }
 
 // Authentication related types
@@ -50,3 +50,4 @@ export interface NewUserCredentials {
   password?: string; // Password is required for creation
   role: 'waiter'; // For now, only waiter creation is supported via UI
 }
+
