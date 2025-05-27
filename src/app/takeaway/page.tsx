@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { MENU_ITEMS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
-import { PlusCircle, Trash2, ShoppingBag, User as UserIcon, Phone, CreditCard, ReceiptText, Printer, RotateCcw, Sparkles } from 'lucide-react'; // Renamed User to UserIcon
+import { PlusCircle, Trash2, ShoppingBag, CreditCard, ReceiptText, Printer, RotateCcw, Sparkles, Ticket } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
 
@@ -25,8 +25,6 @@ export default function TakeawayPage() {
   const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [customerName, setCustomerName] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
   
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
@@ -36,7 +34,7 @@ export default function TakeawayPage() {
 
   useEffect(() => {
     const user = getCurrentUser();
-    if (!user) { // Any logged-in user (admin or waiter) can access takeaway
+    if (!user) { 
       router.push('/login');
     } else {
       setCurrentUser(user);
@@ -79,13 +77,11 @@ export default function TakeawayPage() {
     }
 
     const newOrder: Order = {
-      id: `TAKE-${Date.now()}`,
+      id: `TAKE-${Date.now()}`, // This ID (or a slice of it) will serve as the token
       items: currentOrderItems,
-      status: 'pending', // Takeaway orders go to pending, then billed after payment
+      status: 'pending', // Order is pending payment, considered 'sent to kitchen' upon bill generation
       timestamp: new Date().toISOString(),
       type: 'takeaway',
-      customerName: customerName || undefined,
-      customerPhone: customerPhone || undefined,
     };
     setActiveOrder(newOrder);
 
@@ -102,7 +98,7 @@ export default function TakeawayPage() {
       totalAmount,
       paymentStatus: 'pending',
     });
-    toast({ title: 'Bill Generated', description: 'Bill is ready for payment.' });
+    toast({ title: 'Bill Generated & Order Finalized', description: `Order Token: ${newOrder.id.slice(-6)}. Ready for payment.` });
   };
   
   const processPayment = () => {
@@ -122,8 +118,6 @@ export default function TakeawayPage() {
 
   const handleStartNewOrder = () => {
     setCurrentOrderItems([]);
-    setCustomerName('');
-    setCustomerPhone('');
     setCurrentBill(null);
     setActiveOrder(null);
     setSelectedMenuItemId('');
@@ -148,22 +142,9 @@ export default function TakeawayPage() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl"><ShoppingBag /> New Takeaway Order</CardTitle>
-              <CardDescription>Add items and customer details for takeaway.</CardDescription>
+              <CardDescription>Add items to the order. A token will be generated with the bill.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="customerName" className="flex items-center gap-1"><UserIcon className="w-4 h-4" />Customer Name (Optional)</Label>
-                  <Input id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="John Doe" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="customerPhone" className="flex items-center gap-1"><Phone className="w-4 h-4" />Customer Phone (Optional)</Label>
-                  <Input id="customerPhone" type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="555-1234" />
-                </div>
-              </div>
-
-              <Separator />
-
               <div className="space-y-2">
                 <Label htmlFor="menuItem">Menu Item</Label>
                 <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId}>
@@ -198,7 +179,6 @@ export default function TakeawayPage() {
             <Card className="shadow-lg" id={currentOrderItems.length > 0 && !currentBill ? "current-order-summary-card" : undefined}>
               <CardHeader>
                 <CardTitle className="text-xl">Current Order Summary</CardTitle>
-                {customerName && <CardDescription>For: {customerName}</CardDescription>}
               </CardHeader>
               <CardContent>
                 {currentOrderItems.length === 0 ? (
@@ -229,7 +209,7 @@ export default function TakeawayPage() {
                     <span>${calculateSubtotal(currentOrderItems).toFixed(2)}</span>
                   </div>
                   <Button onClick={handleGenerateBill} className="w-full" size="lg" disabled={currentBill?.paymentStatus === 'pending'}>
-                    <ReceiptText className="mr-2" /> Generate Bill
+                    <ReceiptText className="mr-2" /> Generate Bill & Finalize Order
                   </Button>
                 </CardFooter>
               )}
@@ -238,8 +218,7 @@ export default function TakeawayPage() {
             {currentBill && activeOrder && (
                 <Card className="shadow-lg" id="final-bill-card-takeaway">
                   <CardHeader>
-                    <CardTitle>Final Bill (Order {activeOrder.id.slice(-6)})</CardTitle>
-                    {activeOrder.customerName && <CardDescription className="text-sm">Customer: {activeOrder.customerName}</CardDescription>}
+                    <CardTitle className="flex items-center gap-2"><Ticket className="text-primary"/>Order Token: {activeOrder.id.slice(-6)}</CardTitle>
                     <CardDescription>Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus}</span></CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
@@ -278,3 +257,4 @@ export default function TakeawayPage() {
     </div>
   );
 }
+
