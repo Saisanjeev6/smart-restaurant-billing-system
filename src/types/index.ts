@@ -21,6 +21,8 @@ export interface Order {
   type: 'dine-in' | 'takeaway';
   customerName?: string; // For takeaway
   customerPhone?: string; // For takeaway
+  waiterId?: string; // ID of the waiter who placed/manages the order
+  waiterUsername?: string; // Username of the waiter
 }
 
 export interface Bill {

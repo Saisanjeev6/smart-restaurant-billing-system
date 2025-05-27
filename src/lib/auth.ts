@@ -7,8 +7,8 @@
 
 import type { User, NewUserCredentials, UserRole } from '@/types'; // Assuming User type will be expanded
 
-const USERS_KEY = 'restaurant_users_v3'; // Incremented key for new role
-const CURRENT_USER_KEY = 'restaurant_current_user_v3'; // Incremented key
+const USERS_KEY = 'restaurant_users_v3'; 
+const CURRENT_USER_KEY = 'restaurant_current_user_v3';
 
 const getStoredUsers = (): User[] => {
   if (typeof window === 'undefined') return [];
@@ -25,15 +25,18 @@ const initializeUsers = () => {
   if (!users.find(u => u.username === 'kitchen')) {
     users.push({ username: 'kitchen', password: 'kitchen', role: 'kitchen', id: 'user-kitchen-01' });
   }
+  if (!users.find(u => u.username === 'waiter1')) { // Default waiter for testing
+    users.push({ username: 'waiter1', password: 'password', role: 'waiter', id: 'user-waiter-default-001' });
+  }
+
   // Ensure existing users are preserved, only add if missing.
-  const uniqueUsers = users.reduce((acc, current) => {
-    const x = acc.find(item => item.username === current.username);
-    if (!x) {
-      return acc.concat([current]);
-    } else {
-      return acc;
+  const uniqueUsersMap = new Map<string, User>();
+  users.forEach(user => {
+    if (!uniqueUsersMap.has(user.username)) {
+      uniqueUsersMap.set(user.username, user);
     }
-  }, [] as User[]);
+  });
+  const uniqueUsers = Array.from(uniqueUsersMap.values());
 
   localStorage.setItem(USERS_KEY, JSON.stringify(uniqueUsers));
 };
@@ -70,7 +73,7 @@ export const getCurrentUser = (): User | null => {
 
 export const createUser = (newUser: NewUserCredentials): { success: boolean; message: string; users?: User[] } => {
   if (typeof window === 'undefined') return { success: false, message: 'localStorage not available' };
-  if (newUser.role !== 'waiter') { // Only allow creating waiters for now via this function
+  if (newUser.role !== 'waiter') { 
     return { success: false, message: 'Can only create waiter accounts through this interface.' };
   }
 
@@ -85,7 +88,7 @@ export const createUser = (newUser: NewUserCredentials): { success: boolean; mes
   };
   users.push(userWithId);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  return { success: true, message: `${newUser.role} created successfully.`, users: users.filter(u => u.role === 'waiter') }; // Return only waiters
+  return { success: true, message: `${newUser.role} created successfully.`, users: users.filter(u => u.role === 'waiter') };
 };
 
 export const getUsers = (role?: 'waiter'): User[] => {
