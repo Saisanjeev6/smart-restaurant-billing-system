@@ -28,24 +28,34 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from '@/lib/auth';
+import { getSharedOrders, addOrUpdateSharedOrder, updateSharedOrderStatus } from '@/lib/orderManager';
 
 export default function WaiterPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedTable, setSelectedTable] = useState<string>('');
-  const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]); // Items currently being selected/added
+  const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]); // All orders managed in this session by this waiter
+  const [sessionOrders, setSessionOrders] = useState<Order[]>([]); // All orders for this session from localStorage
   const { toast } = useToast();
   
   const [isBillConfirmOpen, setIsBillConfirmOpen] = useState(false);
   const [orderForBillConfirmation, setOrderForBillConfirmation] = useState<Order | null>(null);
   const [isMounted, setIsMounted] = useState(false);
 
+  const calculateSubtotal = useCallback((items: OrderItem[]) => {
+    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, []);
+
+  const loadSessionOrders = useCallback(() => {
+    if (!isMounted) return;
+    setSessionOrders(getSharedOrders());
+  }, [isMounted]);
+
   useEffect(() => {
     const user = getCurrentUser();
-    if (!user || (user.role !== 'waiter' && user.role !== 'admin')) { // Allow admin to access waiter page
+    if (!user || (user.role !== 'waiter' && user.role !== 'admin')) {
       router.push('/login');
     } else {
       setCurrentUser(user);
@@ -53,26 +63,28 @@ export default function WaiterPage() {
     }
   }, [router]);
 
-  const calculateSubtotal = useCallback((items: OrderItem[]) => {
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, []);
+  useEffect(() => {
+    loadSessionOrders();
+    // Optional: Set up an interval to refresh orders, good for multi-user demo
+    const intervalId = setInterval(loadSessionOrders, 5000); // Refresh every 5 seconds
+    return () => clearInterval(intervalId);
+  }, [loadSessionOrders]);
+
 
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
-    if (!selectedTable || !isMounted) return undefined; // Ensure isMounted
+    if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
-    return activeOrders.find(o => o.tableNumber === tableNum && o.status === 'pending');
-  }, [selectedTable, activeOrders, isMounted]);
+    return sessionOrders.find(o => o.tableNumber === tableNum && o.status === 'pending');
+  }, [selectedTable, sessionOrders, isMounted]);
 
-  // Filter orders for display in the "All Pending Orders" tab
   const allPendingOrdersList = useMemo(() => {
-    if (!isMounted) return []; // Ensure isMounted
-    return activeOrders
-      .filter(order => order.status === 'pending')
+    if (!isMounted) return [];
+    return sessionOrders
+      .filter(order => order.status === 'pending' && order.type === 'dine-in')
       .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
-  }, [activeOrders, isMounted]);
+  }, [sessionOrders, isMounted]);
   
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
-
 
   const handleAddItemToOrder = () => {
     if (!selectedMenuItemId || quantity <= 0) {
@@ -86,7 +98,6 @@ export default function WaiterPage() {
     const menuItem = MENU_ITEMS.find(item => item.id === selectedMenuItemId);
     if (!menuItem) return;
 
-    // Add to the temporary `currentOrderItems` for submission
     setCurrentOrderItems(prevItems => {
       const existingItemIndex = prevItems.findIndex(item => item.id === menuItem.id);
       if (existingItemIndex > -1) {
@@ -116,34 +127,27 @@ export default function WaiterPage() {
     }
 
     const tableNum = parseInt(selectedTable);
-    const existingOrderIndex = activeOrders.findIndex(o => o.tableNumber === tableNum && o.status === 'pending');
+    let orderToUpdate: Order;
 
-    if (existingOrderIndex > -1) {
-      // Update existing pending order
-      setActiveOrders(prevOrders => {
-        const updatedActiveOrders = [...prevOrders];
-        const orderToUpdate = { ...updatedActiveOrders[existingOrderIndex] };
-        
-        const updatedItemsMap = new Map<string, OrderItem>();
-        orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item})); 
+    if (pendingOrderForSelectedTable) {
+      orderToUpdate = { ...pendingOrderForSelectedTable };
+      
+      const updatedItemsMap = new Map<string, OrderItem>();
+      orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item})); 
 
-        currentOrderItems.forEach(newItem => {
-          if (updatedItemsMap.has(newItem.id)) {
-            const existingItem = updatedItemsMap.get(newItem.id)!;
-            existingItem.quantity += newItem.quantity; 
-          } else {
-            updatedItemsMap.set(newItem.id, {...newItem}); 
-          }
-        });
-        orderToUpdate.items = Array.from(updatedItemsMap.values());
-        orderToUpdate.timestamp = new Date().toISOString(); 
-        updatedActiveOrders[existingOrderIndex] = orderToUpdate;
-        return updatedActiveOrders;
+      currentOrderItems.forEach(newItem => {
+        if (updatedItemsMap.has(newItem.id)) {
+          const existingItem = updatedItemsMap.get(newItem.id)!;
+          existingItem.quantity += newItem.quantity; 
+        } else {
+          updatedItemsMap.set(newItem.id, {...newItem}); 
+        }
       });
-      toast({ title: 'Order Updated', description: `Items added to Table ${selectedTable}.` });
+      orderToUpdate.items = Array.from(updatedItemsMap.values());
+      orderToUpdate.timestamp = new Date().toISOString();
+      toast({ title: 'Order Updated', description: `Items added to Table ${selectedTable}. Sent to kitchen.` });
     } else {
-      // Create new pending order
-      const newOrder: Order = {
+      orderToUpdate = {
         id: `ORD-${Date.now()}`,
         tableNumber: tableNum,
         items: [...currentOrderItems], 
@@ -151,11 +155,12 @@ export default function WaiterPage() {
         timestamp: new Date().toISOString(),
         type: 'dine-in',
       };
-      setActiveOrders(prevOrders => [...prevOrders, newOrder]);
       toast({ title: 'Order Submitted', description: `Order for Table ${selectedTable} sent to kitchen.` });
     }
     
+    addOrUpdateSharedOrder(orderToUpdate);
     setCurrentOrderItems([]); 
+    loadSessionOrders(); // Refresh orders list
   };
 
   const handleGenerateBillRequest = () => { 
@@ -170,20 +175,23 @@ export default function WaiterPage() {
   const confirmAndGenerateBill = () => {
     if (!orderForBillConfirmation) return;
 
-    const subtotal = calculateSubtotal(orderForBillConfirmation.items);
-    setActiveOrders(prevOrders =>
-      prevOrders.map(o =>
-        o.id === orderForBillConfirmation.id ? { ...o, status: 'billed', timestamp: new Date().toISOString() } : o
-      )
-    );
+    const success = updateSharedOrderStatus(orderForBillConfirmation.id, 'billed');
     
-    toast({ 
-      title: 'Bill Generated', 
-      description: `Bill for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) sent to admin/billing. Table cleared.` 
-    });
+    if (success) {
+      const subtotal = calculateSubtotal(orderForBillConfirmation.items);
+      toast({ 
+        title: 'Bill Generated', 
+        description: `Bill for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) sent to admin/billing. Table cleared.` 
+      });
+      loadSessionOrders();
+    } else {
+      toast({ title: 'Error', description: 'Failed to generate bill.', variant: 'destructive' });
+    }
     
     setCurrentOrderItems([]); 
-    setSelectedTable(''); 
+    if (selectedTable === String(orderForBillConfirmation.tableNumber)) {
+      setSelectedTable(''); 
+    }
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
   };
@@ -350,13 +358,13 @@ export default function WaiterPage() {
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> All Pending Session Orders</CardTitle>
-                <CardDescription>Overview of all unbilled orders in this session, sorted by table number.</CardDescription>
+                <CardDescription>Overview of all unbilled dine-in orders in this session, sorted by table number. Refreshing every 5 seconds.</CardDescription>
               </CardHeader>
               <CardContent>
                 {allPendingOrdersList.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
                     <Image src="https://placehold.co/400x250.png" alt="Empty restaurant overview" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant empty tables" />
-                    <p>No pending orders across any tables in this session.</p>
+                    <p>No pending dine-in orders across any tables in this session.</p>
                   </div>
                 ) : (
                   <ul className="space-y-4">
@@ -402,7 +410,7 @@ export default function WaiterPage() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Confirm Bill for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  This will finalize and mark the order for Table {orderForBillConfirmation.tableNumber} as 'billed'. This action cannot be undone from the waiter interface.
+                  This will finalize and mark the order for Table {orderForBillConfirmation.tableNumber} as 'billed'. The bill will then be handled by Admin for payment processing. This action cannot be undone from the waiter interface.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
@@ -419,7 +427,7 @@ export default function WaiterPage() {
               </div>
               <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => { setIsBillConfirmOpen(false); setOrderForBillConfirmation(null); }}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmAndGenerateBill}>Confirm & Generate Bill</AlertDialogAction>
+                <AlertDialogAction onClick={confirmAndGenerateBill}>Confirm & Send to Billing</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

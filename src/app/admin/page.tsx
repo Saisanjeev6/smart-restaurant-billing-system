@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import { ManageWaitersTool } from './components/ManageWaitersTool';
 import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
-import { getSharedOrders, initializeSharedOrdersWithMockData } from '@/lib/orderManager';
+import { getSharedOrders, initializeSharedOrdersWithMockData, updateSharedOrderStatus } from '@/lib/orderManager';
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"
@@ -106,7 +106,7 @@ const chartConfig = {
 export default function AdminPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]); // Now sourced from localStorage
   const [selectedTableForBill, setSelectedTableForBill] = useState<string>('');
   const [currentBill, setCurrentBill] = useState<Bill | null>(null);
   const [orderForBill, setOrderForBill] = useState<Order | null>(null);
@@ -118,6 +118,10 @@ export default function AdminPage() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
 
+  const loadAllOrders = useCallback(() => {
+    if(!isMounted) return;
+    setAllOrders(getSharedOrders());
+  }, [isMounted]);
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -125,17 +129,25 @@ export default function AdminPage() {
       router.push('/login');
     } else {
       setCurrentUser(user);
-      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); // Seed if empty
-      setActiveOrders(getSharedOrders()); // Load from shared storage
-      setIsMounted(true);
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
+      setIsMounted(true); // Set isMounted after ensuring user and data init
     }
   }, [router]);
+
+  useEffect(() => {
+    if(isMounted){ // Only load/subscribe if component is mounted and user is admin
+        loadAllOrders();
+        const intervalId = setInterval(loadAllOrders, 5000); // Refresh orders every 5 seconds
+        return () => clearInterval(intervalId);
+    }
+  }, [isMounted, loadAllOrders]);
+
 
   const calculateOrderTotal = (items: OrderItem[]) => items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   
   const formatPeriodLabel = (period: AnalyticsPeriod, start?: Date, end?: Date): string => {
     if (!start || !end && period === 'custom') return 'Custom range not set';
-    if (!start || !end) { // For non-custom periods where start/end might be derived later
+    if (!start || !end) { 
         switch (period) {
             case 'today': return `Today`;
             case 'week': return `This Week`;
@@ -158,7 +170,9 @@ export default function AdminPage() {
     }
   };
 
-  const billedOrders = useMemo(() => activeOrders.filter(order => order.status === 'billed'), [activeOrders]);
+  const billedOrders = useMemo(() => allOrders.filter(order => order.status === 'billed'), [allOrders]);
+  const nonBilledOrders = useMemo(() => allOrders.filter(order => order.status !== 'billed').sort((a,b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()), [allOrders]);
+
 
   const analyticsData = useMemo(() => {
     const now = new Date();
@@ -184,7 +198,7 @@ export default function AdminPage() {
         endDate = customEndDate ? endOfDay(customEndDate) : undefined;
         break;
       default:
-        startDate = startOfMonth(now); // Default to this month if something unexpected
+        startDate = startOfMonth(now); 
     }
     
     let filteredOrders: Order[] = [];
@@ -192,8 +206,6 @@ export default function AdminPage() {
 
     if (startDate && endDate) {
       if (startDate > endDate) {
-        // This toast should ideally be triggered by user action, not in useMemo
-        // Consider moving validation to where custom dates are set
         periodLabel = 'Invalid custom range';
       } else {
         filteredOrders = billedOrders.filter(order => {
@@ -204,14 +216,13 @@ export default function AdminPage() {
       }
     } else if (selectedAnalyticsPeriod === 'custom') {
       periodLabel = 'Please select a start and end date for the custom range.';
-    } else if (startDate) { // For non-custom ranges where endDate might be implicitly now
+    } else if (startDate) { 
         periodLabel = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
          filteredOrders = billedOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
           return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
     }
-
 
     const totalSales = filteredOrders.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
     const totalOrders = filteredOrders.length;
@@ -226,7 +237,6 @@ export default function AdminPage() {
   }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate]);
 
   const monthlyChartData = useMemo(() => {
-    const now = new Date();
     const salesByMonth: { [monthYear: string]: { month: string, monthNumeric: number, year: number, totalSales: number } } = {};
 
     billedOrders.forEach(order => {
@@ -244,7 +254,8 @@ export default function AdminPage() {
     });
     
     const chartDataPoints = [];
-    for (let i = 5; i >= 0; i--) { // Iterate for last 6 months including current
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) { 
       const targetMonthDate = subMonths(now, i);
       const monthYearStr = format(targetMonthDate, 'MMM yyyy');
       if (salesByMonth[monthYearStr]) {
@@ -253,7 +264,6 @@ export default function AdminPage() {
          chartDataPoints.push({ month: monthYearStr, monthNumeric: getMonth(targetMonthDate), year: getYear(targetMonthDate), totalSales: 0 });
       }
     }
-    // Sort ensures chronological order for the chart
     return chartDataPoints.sort((a, b) => (a.year * 100 + a.monthNumeric) - (b.year * 100 + b.monthNumeric));
 
   }, [billedOrders]);
@@ -261,13 +271,10 @@ export default function AdminPage() {
   const orderDetailsForTipTool = useMemo(() => {
     if (orderForBill && currentBill) {
       const itemsSummary = orderForBill.items.map(item => `${item.name} (x${item.quantity})`).join(', ');
-      return `Items: ${itemsSummary}. Subtotal: $${currentBill.subtotal.toFixed(2)}. Total: $${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
+      return `Items: ${itemsSummary}. Subtotal: $${currentBill.subtotal.toFixed(2)}. Tax: $${currentBill.taxAmount.toFixed(2)}. Total: $${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
     }
     return '';
   }, [orderForBill, currentBill]);
-
-  // Filter out 'billed' orders for the "Active Orders" tab
-  const nonBilledOrders = useMemo(() => activeOrders.filter(order => order.status !== 'billed'), [activeOrders]);
 
 
   const handleFetchBill = () => {
@@ -275,8 +282,8 @@ export default function AdminPage() {
       toast({ title: 'Error', description: 'Please select a table to fetch the bill.', variant: 'destructive' });
       return;
     }
-    // Find unbilled dine-in order for the selected table from current activeOrders state
-    const order = activeOrders.find(o => o.tableNumber === parseInt(selectedTableForBill) && o.status !== 'billed' && o.type === 'dine-in');
+    // Find unbilled dine-in order for the selected table from current allOrders state
+    const order = allOrders.find(o => o.tableNumber === parseInt(selectedTableForBill) && o.status !== 'billed' && o.type === 'dine-in');
     if (!order) {
       toast({ title: 'No Bill Found', description: `No active, unbilled dine-in order found for table ${selectedTableForBill}.`, variant: 'destructive' });
       setCurrentBill(null);
@@ -312,13 +319,19 @@ export default function AdminPage() {
 
   const processPayment = () => {
     if (!currentBill || !orderForBill) return;
-    setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
-    // Update the order status in the shared orders via orderManager
-    // For now, just updating local state for immediate UI feedback
-    setActiveOrders(prevOrders => prevOrders.map(o => o.id === orderForBill.id ? { ...o, status: 'billed' } : o));
-    // In a full app, you would also update this in shared storage:
-    // updateSharedOrderStatus(orderForBill.id, 'billed');
-    toast({ title: 'Payment Processed', description: `Bill for order ${orderForBill.id} marked as paid.`, variant: 'default' });
+    
+    const success = updateSharedOrderStatus(orderForBill.id, 'billed');
+    if(success) {
+      setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
+      // The loadAllOrders via interval will refresh the `allOrders` state
+      toast({ title: 'Payment Processed', description: `Bill for order ${orderForBill.id.slice(-6)} marked as paid.`, variant: 'default' });
+      setOrderForBill(null); // Clear the specific order being billed
+      setCurrentBill(null); // Clear the current bill details
+      setSelectedTableForBill(''); // Reset table selection
+      setDiscountPercentage(0);
+    } else {
+      toast({ title: 'Error', description: `Failed to process payment for order ${orderForBill.id.slice(-6)}.`, variant: 'destructive' });
+    }
   };
   
   if (!isMounted || !currentUser) {
@@ -354,7 +367,7 @@ export default function AdminPage() {
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle>Manage Active Orders</CardTitle>
-                <CardDescription>View and manage all current (unbilled) restaurant orders, including dine-in and takeaway.</CardDescription>
+                <CardDescription>View and manage all current (unbilled) restaurant orders, including dine-in and takeaway. Refreshing every 5 seconds.</CardDescription>
               </CardHeader>
               <CardContent>
                 {nonBilledOrders.length === 0 ? (
@@ -372,6 +385,7 @@ export default function AdminPage() {
                       <TableHead>Items</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Status</TableHead>
+                       <TableHead>Timestamp</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -380,20 +394,23 @@ export default function AdminPage() {
                         <TableCell className="font-medium">{order.id.slice(-6)}</TableCell>
                         <TableCell className="capitalize">{order.type}</TableCell>
                         <TableCell>
-                          {order.type === 'dine-in' ? `Table ${order.tableNumber}` : (order.id.slice(-6) || 'Takeaway')}
+                          {order.type === 'dine-in' ? `Table ${order.tableNumber}` : `Token ${order.id.slice(-6)}`}
                         </TableCell>
                         <TableCell>{order.items.length}</TableCell>
                         <TableCell>${calculateOrderTotal(order.items).toFixed(2)}</TableCell>
                         <TableCell>
-                           <span className={`px-2 py-1 text-xs rounded-full font-medium
-                            ${order.status === 'pending' ? 'bg-blue-100 text-blue-700 border border-blue-300' : ''}
-                            ${order.status === 'preparing' ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : ''}
-                            ${order.status === 'ready' ? 'bg-green-100 text-green-700 border border-green-300' : ''}
-                            ${order.status === 'served' ? 'bg-purple-100 text-purple-700 border border-purple-300' : ''}
-                            ${order.status === 'billed' ? 'bg-gray-100 text-gray-700 border border-gray-300' : ''}
+                           <span className={`px-2 py-1 text-xs rounded-full font-medium border
+                            ${order.status === 'pending' ? 'bg-blue-100 text-blue-700 border-blue-300' : ''}
+                            ${order.status === 'preparing' ? 'bg-yellow-100 text-yellow-700 border-yellow-300' : ''}
+                            ${order.status === 'ready' ? 'bg-green-100 text-green-700 border-green-300' : ''}
+                            ${order.status === 'served' ? 'bg-purple-100 text-purple-700 border-purple-300' : ''}
+                            ${order.status === 'billed' ? 'bg-gray-100 text-gray-700 border-gray-300' : ''}
                           `}>
                             {order.status}
                           </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                            {format(parseISO(order.timestamp), "PPpp")}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -459,7 +476,7 @@ export default function AdminPage() {
                         <div className="flex items-end gap-2 pt-2">
                           <div className="flex-grow">
                             <Label htmlFor="discount">Discount (%)</Label>
-                            <Input id="discount" type="number" value={discountPercentage} onChange={e => setDiscountPercentage(parseFloat(e.target.value))} min="0" max="100" />
+                            <Input id="discount" type="number" value={discountPercentage} onChange={e => setDiscountPercentage(parseFloat(e.target.value) || 0)} min="0" max="100" />
                           </div>
                           <Button onClick={applyDiscount} variant="outline"><Percent className="mr-2 h-4 w-4" />Apply</Button>
                         </div>
@@ -500,11 +517,6 @@ export default function AdminPage() {
                         size="sm"
                         onClick={() => {
                           setSelectedAnalyticsPeriod(period.value);
-                          if (period.value !== 'custom') {
-                            // Optionally reset custom dates if a predefined period is chosen
-                            // setCustomStartDate(undefined);
-                            // setCustomEndDate(undefined);
-                          }
                         }}
                       >
                         {period.label}
@@ -645,4 +657,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

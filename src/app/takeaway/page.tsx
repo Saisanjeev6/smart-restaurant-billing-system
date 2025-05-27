@@ -2,7 +2,7 @@
 'use client';
 
 import type { ChangeEvent, FormEvent } from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import type { Order, OrderItem, Bill, User } from '@/types';
 import { PlusCircle, Trash2, ShoppingBag, CreditCard, ReceiptText, Printer, RotateCcw, Sparkles, Ticket } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
+import { addOrUpdateSharedOrder, updateSharedOrderStatus, getSharedOrderById } from '@/lib/orderManager';
 
 
 export default function TakeawayPage() {
@@ -42,7 +43,42 @@ export default function TakeawayPage() {
     }
   }, [router]);
 
+  const loadOrderAndBill = useCallback(() => {
+    if (activeOrder) {
+      const freshOrder = getSharedOrderById(activeOrder.id);
+      if (freshOrder) {
+        setActiveOrder(freshOrder);
+        if (freshOrder.status === 'pending' || freshOrder.status === 'billed') { // Re-calculate bill if still pending or already billed
+          const subtotal = calculateSubtotal(freshOrder.items);
+          const taxAmount = subtotal * TAX_RATE;
+          const totalAmount = subtotal + taxAmount;
+          setCurrentBill({
+            orderId: freshOrder.id,
+            subtotal,
+            taxRate: TAX_RATE,
+            taxAmount,
+            discountAmount: 0, 
+            totalAmount,
+            paymentStatus: freshOrder.status === 'billed' ? 'paid' : 'pending',
+          });
+        }
+      }
+    }
+  }, [activeOrder]);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    loadOrderAndBill(); // Load active order if it exists
+    const intervalId = setInterval(loadOrderAndBill, 5000); // Refresh active order & bill every 5 seconds
+    return () => clearInterval(intervalId);
+  }, [isMounted, loadOrderAndBill]);
+
+
   const handleAddItemToOrder = () => {
+    if (currentBill) { // If bill is already generated, prevent adding more items.
+      toast({ title: 'Order Finalized', description: 'Cannot add items after bill is generated. Please start a new order.', variant: 'destructive' });
+      return;
+    }
     if (!selectedMenuItemId || quantity <= 0) {
       toast({ title: 'Error', description: 'Please select an item and specify a valid quantity.', variant: 'destructive' });
       return;
@@ -63,6 +99,10 @@ export default function TakeawayPage() {
   };
 
   const handleRemoveItem = (itemId: string) => {
+     if (currentBill) { // If bill is already generated, prevent removing items.
+      toast({ title: 'Order Finalized', description: 'Cannot remove items after bill is generated.', variant: 'destructive' });
+      return;
+    }
     setCurrentOrderItems(currentOrderItems.filter(item => item.id !== itemId));
   };
 
@@ -75,14 +115,19 @@ export default function TakeawayPage() {
       toast({ title: 'Error', description: 'Cannot generate bill for an empty order.', variant: 'destructive' });
       return;
     }
+    if (currentBill) { // Prevent re-generating bill
+        toast({ title: 'Bill Already Generated', description: 'A bill for this order already exists.', variant: 'default' });
+        return;
+    }
 
     const newOrder: Order = {
       id: `TAKE-${Date.now()}`, 
       items: currentOrderItems,
-      status: 'pending', // Order is pending, sent to kitchen upon bill generation
+      status: 'pending', 
       timestamp: new Date().toISOString(),
       type: 'takeaway',
     };
+    addOrUpdateSharedOrder(newOrder); // Save to shared storage
     setActiveOrder(newOrder);
 
     const subtotal = calculateSubtotal(currentOrderItems);
@@ -103,11 +148,14 @@ export default function TakeawayPage() {
   
   const processPayment = () => {
     if (!currentBill || !activeOrder) return;
-    setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
-    // In a real app, this order's status might be updated to 'paid' or 'completed' in a backend.
-    // For this prototype, we'll just update the local activeOrder state.
-    setActiveOrder({ ...activeOrder, status: 'billed' }); 
-    toast({ title: 'Payment Processed', description: `Takeaway order ${activeOrder.id.slice(-6)} paid.`, variant: 'default' });
+    const success = updateSharedOrderStatus(activeOrder.id, 'billed');
+    if (success) {
+      setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
+      setActiveOrder({ ...activeOrder, status: 'billed' }); 
+      toast({ title: 'Payment Processed', description: `Takeaway order ${activeOrder.id.slice(-6)} paid.`, variant: 'default' });
+    } else {
+      toast({ title: 'Error', description: 'Failed to process payment.', variant: 'destructive' });
+    }
   };
 
   const handlePrintBill = () => {
@@ -149,7 +197,7 @@ export default function TakeawayPage() {
             <CardContent className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="menuItem">Menu Item</Label>
-                <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId}>
+                <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={!!currentBill}>
                   <SelectTrigger id="menuItem">
                     <SelectValue placeholder="Select an item" />
                   </SelectTrigger>
@@ -169,9 +217,10 @@ export default function TakeawayPage() {
                   min="1"
                   value={quantity}
                   onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value))}
+                  disabled={!!currentBill}
                 />
               </div>
-              <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId}>
+              <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !!currentBill}>
                 <PlusCircle className="mr-2" /> Add Item to Order
               </Button>
             </CardContent>
@@ -183,12 +232,12 @@ export default function TakeawayPage() {
                 <CardTitle className="text-xl">Current Order Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                {currentOrderItems.length === 0 ? (
+                {currentOrderItems.length === 0 && !activeOrder ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                     <Image src="https://placehold.co/300x200.png" alt="Empty shopping bag" width={150} height={100} className="mb-4 rounded-lg opacity-70" data-ai-hint="empty bag takeaway" />
                     <p>No items added yet. Start building the order.</p>
                   </div>
-                ) : (
+                ) : currentOrderItems.length > 0 && !activeOrder ? ( // Items added, but bill not yet generated
                   <ul className="space-y-3">
                     {currentOrderItems.map(item => (
                       <li key={item.id} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
@@ -196,13 +245,14 @@ export default function TakeawayPage() {
                           <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
                           <p className="text-sm text-primary">${(item.price * item.quantity).toFixed(2)}</p>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
+                        <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)} disabled={!!currentBill}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
                       </li>
                     ))}
                   </ul>
-                )}
+                ) : null /* When activeOrder exists, this card is superseded by the Bill card */
+                }
               </CardContent>
               {currentOrderItems.length > 0 && !currentBill && (
                 <CardFooter className="flex flex-col gap-4 pt-4 border-t">
@@ -210,7 +260,7 @@ export default function TakeawayPage() {
                     <span>Subtotal:</span>
                     <span>${calculateSubtotal(currentOrderItems).toFixed(2)}</span>
                   </div>
-                  <Button onClick={handleGenerateBill} className="w-full" size="lg" disabled={currentBill?.paymentStatus === 'pending'}>
+                  <Button onClick={handleGenerateBill} className="w-full" size="lg" disabled={!!currentBill}>
                     <ReceiptText className="mr-2" /> Generate Bill & Send to Kitchen
                   </Button>
                 </CardFooter>
@@ -221,7 +271,7 @@ export default function TakeawayPage() {
                 <Card className="shadow-lg" id="final-bill-card-takeaway">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Ticket className="text-primary"/>Order Token: {activeOrder.id.slice(-6)}</CardTitle>
-                    <CardDescription>Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus} (Order status: {activeOrder.status})</span></CardDescription>
+                    <CardDescription>Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus} (Order status: <span className='capitalize'>{activeOrder.status}</span>)</span></CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     {activeOrder.items.map(item => (
@@ -250,6 +300,9 @@ export default function TakeawayPage() {
                         </Button>
                       </>
                     )}
+                     {currentBill.paymentStatus !== 'paid' && activeOrder.status !== 'pending' && activeOrder.status !== 'billed' && ( // e.g. 'ready'
+                       <p className='text-sm text-center text-green-600'>Order is {activeOrder.status}. Awaiting payment.</p>
+                    )}
                   </CardFooter>
                 </Card>
               )}
@@ -259,4 +312,3 @@ export default function TakeawayPage() {
     </div>
   );
 }
-
