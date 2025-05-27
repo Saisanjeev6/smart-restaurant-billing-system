@@ -77,9 +77,9 @@ export default function TakeawayPage() {
     }
 
     const newOrder: Order = {
-      id: `TAKE-${Date.now()}`, // This ID (or a slice of it) will serve as the token
+      id: `TAKE-${Date.now()}`, 
       items: currentOrderItems,
-      status: 'pending', // Order is pending payment, considered 'sent to kitchen' upon bill generation
+      status: 'pending', // Order is pending, sent to kitchen upon bill generation
       timestamp: new Date().toISOString(),
       type: 'takeaway',
     };
@@ -98,12 +98,14 @@ export default function TakeawayPage() {
       totalAmount,
       paymentStatus: 'pending',
     });
-    toast({ title: 'Bill Generated & Order Finalized', description: `Order Token: ${newOrder.id.slice(-6)}. Ready for payment.` });
+    toast({ title: 'Order Sent to Kitchen', description: `Token: ${newOrder.id.slice(-6)}. Bill ready for payment.` });
   };
   
   const processPayment = () => {
     if (!currentBill || !activeOrder) return;
     setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
+    // In a real app, this order's status might be updated to 'paid' or 'completed' in a backend.
+    // For this prototype, we'll just update the local activeOrder state.
     setActiveOrder({ ...activeOrder, status: 'billed' }); 
     toast({ title: 'Payment Processed', description: `Takeaway order ${activeOrder.id.slice(-6)} paid.`, variant: 'default' });
   };
@@ -142,7 +144,7 @@ export default function TakeawayPage() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl"><ShoppingBag /> New Takeaway Order</CardTitle>
-              <CardDescription>Add items to the order. A token will be generated with the bill.</CardDescription>
+              <CardDescription>Add items to the order. A token will be generated when the bill is created.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
@@ -209,7 +211,7 @@ export default function TakeawayPage() {
                     <span>${calculateSubtotal(currentOrderItems).toFixed(2)}</span>
                   </div>
                   <Button onClick={handleGenerateBill} className="w-full" size="lg" disabled={currentBill?.paymentStatus === 'pending'}>
-                    <ReceiptText className="mr-2" /> Generate Bill & Finalize Order
+                    <ReceiptText className="mr-2" /> Generate Bill & Send to Kitchen
                   </Button>
                 </CardFooter>
               )}
@@ -219,7 +221,7 @@ export default function TakeawayPage() {
                 <Card className="shadow-lg" id="final-bill-card-takeaway">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2"><Ticket className="text-primary"/>Order Token: {activeOrder.id.slice(-6)}</CardTitle>
-                    <CardDescription>Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus}</span></CardDescription>
+                    <CardDescription>Status: <span className={`font-semibold ${currentBill.paymentStatus === 'paid' ? 'text-green-600' : 'text-orange-600'}`}>{currentBill.paymentStatus} (Order status: {activeOrder.status})</span></CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     {activeOrder.items.map(item => (

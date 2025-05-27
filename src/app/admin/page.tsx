@@ -17,7 +17,7 @@ import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageWaitersTool } from './components/ManageWaitersTool';
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon } from 'lucide-react';
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
@@ -28,59 +28,67 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 
 
-// Enhanced Mock orders data for analytics
+// Enhanced Mock orders data for analytics and active orders display
 const MOCK_ORDERS: Order[] = [
   {
-    id: 'ORD-1001', tableNumber: 3, items: [{ ...MENU_ITEMS[0], quantity: 2 }, { ...MENU_ITEMS[2], quantity: 1 }], // 8.5*2 + 25 = 17 + 25 = 42
-    status: 'billed', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in' // ~2 hours ago
+    id: 'ORD-1001', tableNumber: 3, items: [{ ...MENU_ITEMS[0], quantity: 2 }, { ...MENU_ITEMS[2], quantity: 1 }],
+    status: 'billed', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in'
   },
   {
-    id: 'ORD-1002', tableNumber: 5, items: [{ ...MENU_ITEMS[3], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }], // 30 + 18 + 3.5*2 = 30+18+7 = 55
-    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in' // 1 day ago
+    id: 'ORD-1002', tableNumber: 5, items: [{ ...MENU_ITEMS[3], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }],
+    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in'
   },
   {
-    id: 'ORD-1003', customerName: 'Jane Doe', items: [{ ...MENU_ITEMS[8], quantity: 1 }], // 15
-    status: 'ready', timestamp: new Date(Date.now() - 1800000).toISOString(), type: 'takeaway' // Not billed
+    id: 'TAKE-001', customerName: 'Quick Bite', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[7], quantity: 1 }],
+    status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway' // 3 mins ago
   },
   {
-    id: 'ORD-1004', tableNumber: 1, items: [{ ...MENU_ITEMS[1], quantity: 1 }, { ...MENU_ITEMS[5], quantity: 1 }], // 12 + 9 = 21
-    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), type: 'dine-in' // 2 days ago
+    id: 'ORD-1004', tableNumber: 1, items: [{ ...MENU_ITEMS[1], quantity: 1 }, { ...MENU_ITEMS[5], quantity: 1 }],
+    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), type: 'dine-in'
   },
   {
-    id: 'ORD-1005', customerName: 'Alice Smith', items: [{ ...MENU_ITEMS[0], quantity: 2 }], // 8.5*2 = 17
-    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 8).toISOString(), type: 'takeaway' // 8 days ago
+    id: 'TAKE-002', items: [{ ...MENU_ITEMS[0], quantity: 2 }],
+    status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway' // 5 mins ago
   },
   {
-    id: 'ORD-1006', tableNumber: 4, items: [{ ...MENU_ITEMS[2], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }], // 25 + 3.5*2 = 32
-    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), type: 'dine-in' // 15 days ago
+    id: 'ORD-1005', customerName: 'Alice Smith', items: [{ ...MENU_ITEMS[0], quantity: 2 }], // This was a takeaway in original, changed to dine-in for consistency in active orders
+    tableNumber: 9, status: 'pending', timestamp: new Date(Date.now() - 86400000 * 8).toISOString(), type: 'dine-in'
   },
   {
-    id: 'ORD-1007', tableNumber: 7, items: [{ ...MENU_ITEMS[3], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 1 }], // 30*2 + 4.5 = 64.5
-    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in' // 1 month ago
+    id: 'ORD-1006', tableNumber: 4, items: [{ ...MENU_ITEMS[2], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }],
+    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), type: 'dine-in'
+  },
+  {
+    id: 'TAKE-003', items: [{ ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 1 }],
+    status: 'billed', timestamp: new Date(Date.now() - 600000).toISOString(), type: 'takeaway' // 10 mins ago, already billed
+  },
+  {
+    id: 'ORD-1007', tableNumber: 7, items: [{ ...MENU_ITEMS[3], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 1 }],
+    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in'
   },
    {
-    id: 'ORD-1008', customerName: 'Bob Johnson', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }], // 15 + 18 = 33
-    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 2)).toISOString(), type: 'takeaway' // 2 months ago
+    id: 'ORD-1008', customerName: 'Bob Johnson', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }],
+    tableNumber: 10, status: 'pending', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 2)).toISOString(), type: 'dine-in'
   },
   {
-    id: 'ORD-1009', tableNumber: 2, items: [{ ...MENU_ITEMS[0], quantity: 1 }], // 8.5
-    status: 'billed', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in' // Approx 1.5 months ago
+    id: 'ORD-1009', tableNumber: 2, items: [{ ...MENU_ITEMS[0], quantity: 1 }],
+    status: 'billed', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in'
   },
    {
-    id: 'ORD-1010', tableNumber: 6, items: [{ ...MENU_ITEMS[5], quantity: 2 }], // 9*2 = 18
-    status: 'billed', timestamp: new Date().toISOString(), type: 'dine-in' // Today
+    id: 'ORD-1010', tableNumber: 6, items: [{ ...MENU_ITEMS[5], quantity: 2 }],
+    status: 'billed', timestamp: new Date().toISOString(), type: 'dine-in'
   },
   {
-    id: 'ORD-1011', tableNumber: 8, items: [{ ...MENU_ITEMS[9], quantity: 1 }], // 20
-    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in' // 3 months ago
+    id: 'ORD-1011', tableNumber: 8, items: [{ ...MENU_ITEMS[9], quantity: 1 }],
+    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in'
   },
   {
-    id: 'ORD-1012', customerName: 'Carol White', items: [{ ...MENU_ITEMS[1], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 2 }], // 12*2 + 4.5*2 = 24 + 9 = 33
-    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 4)).toISOString(), type: 'takeaway' // 4 months ago
+    id: 'TAKE-004', customerName: 'Carol White', items: [{ ...MENU_ITEMS[1], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 2 }],
+    status: 'pending', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 4)).toISOString(), type: 'takeaway'
   },
    {
-    id: 'ORD-1013', customerName: 'David Green', items: [{ ...MENU_ITEMS[4], quantity: 1 }], // 18
-    status: 'billed', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 5)).setDate(5)).toISOString(), type: 'takeaway' // ~5.5 months ago
+    id: 'TAKE-005', customerName: 'David Green', items: [{ ...MENU_ITEMS[4], quantity: 1 }],
+    status: 'ready', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 5)).setDate(5)).toISOString(), type: 'takeaway'
   }
 ];
 
@@ -122,9 +130,7 @@ export default function AdminPage() {
 
 
   const calculateOrderTotal = (items: OrderItem[]) => items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-  const billedOrders = useMemo(() => activeOrders.filter(order => order.status === 'billed'), [activeOrders]);
-
+  
   const formatPeriodLabel = (period: AnalyticsPeriod, start?: Date, end?: Date): string => {
     if (!start || !end) return 'Custom range not set';
     switch (period) {
@@ -141,6 +147,8 @@ export default function AdminPage() {
     }
   };
 
+  const billedOrders = useMemo(() => activeOrders.filter(order => order.status === 'billed'), [activeOrders]);
+
   const analyticsData = useMemo(() => {
     const now = new Date();
     let startDate: Date | undefined;
@@ -151,14 +159,14 @@ export default function AdminPage() {
         startDate = startOfDay(now);
         break;
       case 'week':
-        startDate = startOfWeek(now, { weekStartsOn: 1 }); // Assuming week starts on Monday
+        startDate = startOfWeek(now, { weekStartsOn: 1 }); 
         break;
       case 'month':
         startDate = startOfMonth(now);
         break;
       case '2months':
-        startDate = startOfMonth(subMonths(now, 1)); // Start of the previous month
-        endDate = endOfMonth(now); // End of current month to cover two full months
+        startDate = startOfMonth(subMonths(now, 1)); 
+        endDate = endOfMonth(now); 
         break;
       case 'custom':
         startDate = customStartDate ? startOfDay(customStartDate) : undefined;
@@ -200,14 +208,13 @@ export default function AdminPage() {
   }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, toast]);
 
   const monthlyChartData = useMemo(() => {
-    // This logic remains the same, as it always shows the last 6 months regardless of selected period
     const now = new Date();
     const salesByMonth: { [monthYear: string]: { month: string, monthNumeric: number, year: number, totalSales: number } } = {};
 
     billedOrders.forEach(order => {
       const orderDate = parseISO(order.timestamp);
       const monthYearStr = format(orderDate, 'MMM yyyy');
-      const monthNumeric = getMonth(orderDate); // 0-indexed
+      const monthNumeric = getMonth(orderDate); 
       const year = getYear(orderDate);
       
       if (!salesByMonth[monthYearStr]) {
@@ -258,7 +265,7 @@ export default function AdminPage() {
       totalAmount,
       paymentStatus: 'pending',
     });
-    setDiscountPercentage(0); // Reset discount
+    setDiscountPercentage(0); 
     toast({ title: 'Bill Fetched', description: `Bill for table ${selectedTableForBill} is ready.` });
   };
 
@@ -288,7 +295,7 @@ export default function AdminPage() {
   if (!isMounted || !currentUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <Sparkles className="w-12 h-12 animate-spin text-primary" />
+        <Utensils className="w-12 h-12 animate-spin text-primary" />
       </div>
     );
   }
@@ -300,6 +307,10 @@ export default function AdminPage() {
     { label: 'Last 2 Months', value: '2months' },
     { label: 'Custom Range', value: 'custom' },
   ];
+
+  // Filter out 'billed' orders for the "Active Orders" tab
+  const nonBilledOrders = useMemo(() => activeOrders.filter(order => order.status !== 'billed'), [activeOrders]);
+
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -317,20 +328,20 @@ export default function AdminPage() {
           <TabsContent value="orders">
             <Card className="shadow-lg">
               <CardHeader>
-                <CardTitle>Manage Orders</CardTitle>
-                <CardDescription>View and manage all current restaurant orders.</CardDescription>
+                <CardTitle>Manage Active Orders</CardTitle>
+                <CardDescription>View and manage all current (unbilled) restaurant orders, including dine-in and takeaway.</CardDescription>
               </CardHeader>
               <CardContent>
-                {activeOrders.length === 0 ? (
+                {nonBilledOrders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                         <Image src="https://placehold.co/400x250.png" alt="Restaurant scene" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant people" />
-                        <p>No active orders at the moment.</p>
+                        <p>No active (unbilled) orders at the moment.</p>
                     </div>
                 ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Order ID</TableHead>
+                      <TableHead>ID/Token</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Table/Customer</TableHead>
                       <TableHead>Items</TableHead>
@@ -339,14 +350,26 @@ export default function AdminPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {activeOrders.map(order => (
+                    {nonBilledOrders.map(order => (
                       <TableRow key={order.id}>
                         <TableCell className="font-medium">{order.id.slice(-6)}</TableCell>
                         <TableCell className="capitalize">{order.type}</TableCell>
-                        <TableCell>{order.type === 'dine-in' ? `Table ${order.tableNumber}` : order.customerName || 'N/A'}</TableCell>
+                        <TableCell>
+                          {order.type === 'dine-in' ? `Table ${order.tableNumber}` : (order.customerName || 'Takeaway')}
+                        </TableCell>
                         <TableCell>{order.items.length}</TableCell>
                         <TableCell>${calculateOrderTotal(order.items).toFixed(2)}</TableCell>
-                        <TableCell><span className={`px-2 py-1 text-xs rounded-full ${order.status === 'billed' ? 'bg-green-200 text-green-800' : order.status === 'ready' ? 'bg-yellow-200 text-yellow-800' : 'bg-blue-200 text-blue-800'}`}>{order.status}</span></TableCell>
+                        <TableCell>
+                           <span className={`px-2 py-1 text-xs rounded-full font-medium
+                            ${order.status === 'pending' ? 'bg-blue-100 text-blue-700 border border-blue-300' : ''}
+                            ${order.status === 'preparing' ? 'bg-yellow-100 text-yellow-700 border border-yellow-300' : ''}
+                            ${order.status === 'ready' ? 'bg-green-100 text-green-700 border border-green-300' : ''}
+                            ${order.status === 'served' ? 'bg-purple-100 text-purple-700 border border-purple-300' : ''}
+                            ${order.status === 'billed' ? 'bg-gray-100 text-gray-700 border border-gray-300' : ''}
+                          `}>
+                            {order.status}
+                          </span>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -360,12 +383,12 @@ export default function AdminPage() {
             <div className="grid gap-6 md:grid-cols-2">
               <Card className="shadow-lg">
                 <CardHeader>
-                  <CardTitle>Finalize Bill</CardTitle>
-                  <CardDescription>Select a table to generate and finalize their bill.</CardDescription>
+                  <CardTitle>Finalize Dine-in Bill</CardTitle>
+                  <CardDescription>Select a table to generate and finalize their bill. Takeaway bills are managed on the Takeaway page.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
-                    <Label htmlFor="billTableNumber">Table Number</Label>
+                    <Label htmlFor="billTableNumber">Table Number (Dine-in)</Label>
                     <Select value={selectedTableForBill} onValueChange={setSelectedTableForBill}>
                       <SelectTrigger id="billTableNumber">
                         <SelectValue placeholder="Select table for billing" />
@@ -556,7 +579,7 @@ export default function AdminPage() {
                           tickLine={false} 
                           axisLine={false} 
                           tickMargin={8}
-                          tickFormatter={(value) => value.slice(0, 3)} // Shorten month name if needed
+                          tickFormatter={(value) => value.slice(0, 3)} 
                         />
                         <YAxis 
                           tickFormatter={(value) => `$${value}`}
@@ -587,6 +610,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-
-    
