@@ -17,25 +17,79 @@ import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageWaitersTool } from './components/ManageWaitersTool';
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog } from 'lucide-react';
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
+import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay } from 'date-fns';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"
 
-// Mock orders data
+
+// Enhanced Mock orders data for analytics
 const MOCK_ORDERS: Order[] = [
   {
-    id: 'ORD-1001', tableNumber: 3, items: [{ ...MENU_ITEMS[0], quantity: 2 }, { ...MENU_ITEMS[2], quantity: 1 }], 
-    status: 'served', timestamp: new Date(Date.now() - 3600000).toISOString(), type: 'dine-in'
+    id: 'ORD-1001', tableNumber: 3, items: [{ ...MENU_ITEMS[0], quantity: 2 }, { ...MENU_ITEMS[2], quantity: 1 }], // 8.5*2 + 25 = 17 + 25 = 42
+    status: 'billed', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in' // ~2 hours ago
   },
   {
-    id: 'ORD-1002', tableNumber: 5, items: [{ ...MENU_ITEMS[3], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }], 
-    status: 'billed', timestamp: new Date(Date.now() - 7200000).toISOString(), type: 'dine-in'
+    id: 'ORD-1002', tableNumber: 5, items: [{ ...MENU_ITEMS[3], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }], // 30 + 18 + 3.5*2 = 30+18+7 = 55
+    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in' // 1 day ago
   },
   {
-    id: 'ORD-1003', customerName: 'Jane Doe', items: [{ ...MENU_ITEMS[8], quantity: 1 }], 
-    status: 'ready', timestamp: new Date(Date.now() - 1800000).toISOString(), type: 'takeaway'
+    id: 'ORD-1003', customerName: 'Jane Doe', items: [{ ...MENU_ITEMS[8], quantity: 1 }], // 15
+    status: 'ready', timestamp: new Date(Date.now() - 1800000).toISOString(), type: 'takeaway' // Not billed
   },
+  {
+    id: 'ORD-1004', tableNumber: 1, items: [{ ...MENU_ITEMS[1], quantity: 1 }, { ...MENU_ITEMS[5], quantity: 1 }], // 12 + 9 = 21
+    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), type: 'dine-in' // 2 days ago
+  },
+  {
+    id: 'ORD-1005', customerName: 'Alice Smith', items: [{ ...MENU_ITEMS[0], quantity: 2 }], // 8.5*2 = 17
+    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 8).toISOString(), type: 'takeaway' // 8 days ago
+  },
+  {
+    id: 'ORD-1006', tableNumber: 4, items: [{ ...MENU_ITEMS[2], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }], // 25 + 3.5*2 = 32
+    status: 'billed', timestamp: new Date(Date.now() - 86400000 * 15).toISOString(), type: 'dine-in' // 15 days ago
+  },
+  {
+    id: 'ORD-1007', tableNumber: 7, items: [{ ...MENU_ITEMS[3], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 1 }], // 30*2 + 4.5 = 64.5
+    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in' // 1 month ago
+  },
+   {
+    id: 'ORD-1008', customerName: 'Bob Johnson', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }], // 15 + 18 = 33
+    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 2)).toISOString(), type: 'takeaway' // 2 months ago
+  },
+  {
+    id: 'ORD-1009', tableNumber: 2, items: [{ ...MENU_ITEMS[0], quantity: 1 }], // 8.5
+    status: 'billed', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in' // Approx 1.5 months ago
+  },
+   {
+    id: 'ORD-1010', tableNumber: 6, items: [{ ...MENU_ITEMS[5], quantity: 2 }], // 9*2 = 18
+    status: 'billed', timestamp: new Date().toISOString(), type: 'dine-in' // Today
+  },
+  {
+    id: 'ORD-1011', tableNumber: 8, items: [{ ...MENU_ITEMS[9], quantity: 1 }], // 20
+    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in' // 3 months ago
+  },
+  {
+    id: 'ORD-1012', customerName: 'Carol White', items: [{ ...MENU_ITEMS[1], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 2 }], // 12*2 + 4.5*2 = 24 + 9 = 33
+    status: 'billed', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 4)).toISOString(), type: 'takeaway' // 4 months ago
+  },
+   {
+    id: 'ORD-1013', customerName: 'David Green', items: [{ ...MENU_ITEMS[4], quantity: 1 }], // 18
+    status: 'billed', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 5)).setDate(5)).toISOString(), type: 'takeaway' // ~5.5 months ago
+  }
 ];
+
+type AnalyticsPeriod = 'today' | 'week' | '10days' | 'month' | '2months';
+
+const chartConfig = {
+  totalSales: {
+    label: "Total Sales",
+    color: "hsl(var(--primary))",
+  },
+} satisfies ChartConfig;
+
 
 export default function AdminPage() {
   const router = useRouter();
@@ -47,6 +101,8 @@ export default function AdminPage() {
   const [discountPercentage, setDiscountPercentage] = useState<number>(0);
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
+
+  const [selectedAnalyticsPeriod, setSelectedAnalyticsPeriod] = useState<AnalyticsPeriod>('month');
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -60,6 +116,93 @@ export default function AdminPage() {
 
 
   const calculateOrderTotal = (items: OrderItem[]) => items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const billedOrders = useMemo(() => activeOrders.filter(order => order.status === 'billed'), [activeOrders]);
+
+  const analyticsData = useMemo(() => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = endOfDay(now);
+
+    switch (selectedAnalyticsPeriod) {
+      case 'today':
+        startDate = startOfDay(now);
+        break;
+      case 'week':
+        startDate = startOfWeek(now, { weekStartsOn: 1 }); // Assuming week starts on Monday
+        break;
+      case '10days':
+        startDate = startOfDay(subDays(now, 9)); // 9 days ago to include today as 10th day
+        break;
+      case 'month':
+        startDate = startOfMonth(now);
+        break;
+      case '2months':
+        startDate = startOfMonth(subMonths(now, 1)); // Start of the previous month
+        break;
+      default:
+        startDate = startOfMonth(now);
+    }
+    
+    const filteredOrders = billedOrders.filter(order => {
+      const orderDate = parseISO(order.timestamp);
+      return isWithinInterval(orderDate, { start: startDate, end: endDate });
+    });
+
+    const totalSales = filteredOrders.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
+    const totalOrders = filteredOrders.length;
+    const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+
+    return {
+      totalSales,
+      totalOrders,
+      averageOrderValue,
+      periodLabel: formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate)
+    };
+  }, [billedOrders, selectedAnalyticsPeriod]);
+
+  const formatPeriodLabel = (period: AnalyticsPeriod, start: Date, end: Date): string => {
+    switch (period) {
+      case 'today': return `Today (${format(start, 'MMM d')})`;
+      case 'week': return `This Week (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
+      case '10days': return `Last 10 Days (${format(start, 'MMM d')} - ${format(end, 'MMM d')})`;
+      case 'month': return `This Month (${format(start, 'MMMM yyyy')})`;
+      case '2months': return `Last 2 Months (${format(start, 'MMMM yyyy')} - ${format(end, 'MMMM yyyy')})`;
+      default: return '';
+    }
+  };
+
+  const monthlyChartData = useMemo(() => {
+    const now = new Date();
+    const salesByMonth: { [monthYear: string]: { month: string, monthNumeric: number, year: number, totalSales: number } } = {};
+
+    billedOrders.forEach(order => {
+      const orderDate = parseISO(order.timestamp);
+      const monthYearStr = format(orderDate, 'MMM yyyy');
+      const monthNumeric = getMonth(orderDate); // 0-indexed
+      const year = getYear(orderDate);
+      
+      if (!salesByMonth[monthYearStr]) {
+        salesByMonth[monthYearStr] = { month: monthYearStr, monthNumeric, year, totalSales: 0 };
+      }
+      salesByMonth[monthYearStr].totalSales += calculateOrderTotal(order.items);
+    });
+    
+    // Get data for the last 6 months, including current
+    const chartDataPoints = [];
+    for (let i = 5; i >= 0; i--) {
+      const targetMonthDate = subMonths(now, i);
+      const monthYearStr = format(targetMonthDate, 'MMM yyyy');
+      if (salesByMonth[monthYearStr]) {
+        chartDataPoints.push(salesByMonth[monthYearStr]);
+      } else {
+         chartDataPoints.push({ month: monthYearStr, monthNumeric: getMonth(targetMonthDate), year: getYear(targetMonthDate), totalSales: 0 });
+      }
+    }
+    return chartDataPoints.sort((a, b) => (a.year * 100 + a.monthNumeric) - (b.year * 100 + b.monthNumeric));
+
+  }, [billedOrders]);
+
 
   const handleFetchBill = () => {
     if (!selectedTableForBill) {
@@ -116,7 +259,6 @@ export default function AdminPage() {
   }, [orderForBill, currentBill]);
 
   if (!isMounted || !currentUser) {
-    // Show a loading state or null while checking auth / redirecting
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Sparkles className="w-12 h-12 animate-spin text-primary" />
@@ -124,16 +266,25 @@ export default function AdminPage() {
     );
   }
 
+  const analyticsPeriods: { label: string; value: AnalyticsPeriod }[] = [
+    { label: 'Today', value: 'today' },
+    { label: 'This Week', value: 'week' },
+    { label: 'Last 10 Days', value: '10days' },
+    { label: 'This Month', value: 'month' },
+    { label: 'Last 2 Months', value: '2months' },
+  ];
+
   return (
     <div className="flex flex-col min-h-screen">
       <AppHeader title="Admin Dashboard" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-5">
             <TabsTrigger value="orders" className="flex items-center gap-2"><ListChecks /> Active Orders</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText /> Bill Management</TabsTrigger>
             <TabsTrigger value="tips" className="flex items-center gap-2"><Sparkles /> AI Tip Suggester</TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Waiters</TabsTrigger>
+            <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart /> Sales Analytics</TabsTrigger>
           </TabsList>
 
           <TabsContent value="orders">
@@ -145,7 +296,7 @@ export default function AdminPage() {
               <CardContent>
                 {activeOrders.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                        <Image src="https://placehold.co/400x250.png" alt="Restaurant scene" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant scene people" />
+                        <Image src="https://placehold.co/400x250.png" alt="Restaurant scene" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant people" />
                         <p>No active orders at the moment.</p>
                     </div>
                 ) : (
@@ -256,8 +407,97 @@ export default function AdminPage() {
           <TabsContent value="users">
             <ManageWaitersTool />
           </TabsContent>
+          <TabsContent value="analytics">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-xl"><LineChart className="text-primary" /> Sales Analytics</CardTitle>
+                <CardDescription>Analyze sales data over different periods. Displaying data for <span className="font-semibold">{analyticsData.periodLabel}</span>.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex flex-wrap items-center gap-2 p-2 rounded-md bg-muted">
+                  <CalendarDays className="w-5 h-5 text-muted-foreground" />
+                  <span className="mr-2 text-sm font-medium text-muted-foreground">Select Period:</span>
+                  {analyticsPeriods.map(period => (
+                    <Button
+                      key={period.value}
+                      variant={selectedAnalyticsPeriod === period.value ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedAnalyticsPeriod(period.value)}
+                    >
+                      {period.label}
+                    </Button>
+                  ))}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card className="bg-card/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-medium flex items-center gap-2"><DollarSign className="text-green-500"/>Total Sales</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">${analyticsData.totalSales.toFixed(2)}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-medium flex items-center gap-2"><ShoppingCart className="text-blue-500" />Total Orders</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">{analyticsData.totalOrders}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-card/50">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-medium flex items-center gap-2"><DollarSign className="text-purple-500" /><Percent className="text-purple-500 w-4 h-4 -ml-4 -mt-1" />Avg. Order Value</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold">${analyticsData.averageOrderValue.toFixed(2)}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+                
+                <Separator />
+
+                <div>
+                  <h3 className="mb-4 text-lg font-semibold">Monthly Sales Overview (Last 6 Months)</h3>
+                  {monthlyChartData.length > 0 ? (
+                     <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                      <BarChart accessibilityLayer data={monthlyChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="month" 
+                          tickLine={false} 
+                          axisLine={false} 
+                          tickMargin={8}
+                          tickFormatter={(value) => value.slice(0, 3)} // Shorten month name if needed
+                        />
+                        <YAxis 
+                          tickFormatter={(value) => `$${value}`}
+                          tickLine={false}
+                          axisLine={false}
+                          tickMargin={8}
+                        />
+                        <ChartTooltip
+                          cursor={false}
+                          content={<ChartTooltipContent indicator="dot" />}
+                        />
+                        <Legend />
+                        <Bar dataKey="totalSales" fill="var(--color-totalSales)" radius={4} />
+                      </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                      <Info className="w-12 h-12 mb-3 text-primary/50" />
+                      <p>No sales data available for the past 6 months to display in the chart.</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </main>
     </div>
   );
 }
+
