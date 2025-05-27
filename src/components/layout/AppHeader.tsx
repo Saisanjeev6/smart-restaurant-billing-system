@@ -33,23 +33,10 @@ export function AppHeader({ title }: AppHeaderProps) {
     router.push('/'); // Redirect to the main home page after logout
   };
 
-  const isLoginPage = pathname === '/login';
-
-  // Determine the href for the "Home" Utensils icon
-  // For logged-in users (admin/waiter), the Utensils icon always links to '/',
-  // the home page will then decide what to show based on currentUser.
-  const homeIconHref = '/'; 
-
-  // Determine if the Utensils icon should be a link or static
-  // It's static if on the effective "home" for the current auth state.
-  // For unauthenticated users, it's static on '/' or '/login'.
-  // For logged-in users, it's always a link from their dashboards back to '/'.
-  const isUtensilsIconLinkActive = !(
-    (pathname === '/' && !currentUser) || 
-    (isLoginPage && !currentUser) ||
-    (pathname === '/' && currentUser && currentUser.role === 'admin') // Admin on admin hub page, icon is static
-  );
-
+  // The Utensils icon (Home button) always links to the main home page '/'
+  const homeIconHref = '/';
+  // The icon is an active link unless the user is already on the home page '/'
+  const isUtensilsIconLinkActive = pathname !== '/';
 
   // Header during initial mount / loading state
   if (!isMounted) {
@@ -65,19 +52,7 @@ export function AppHeader({ title }: AppHeaderProps) {
     );
   }
 
-  // Minimal header for login page when not logged in (and isMounted is true)
-  if (isLoginPage && !currentUser) {
-     return (
-        <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
-            <div className="flex items-center gap-3">
-                <Utensils className="w-8 h-8 text-primary" /> {/* Static icon on login page */}
-                <h1 className="text-xl font-semibold tracking-tight md:text-2xl text-foreground">{title}</h1>
-            </div>
-        </header>
-     );
-  }
-
-  // Default full header for logged-in users or other pages (and isMounted is true)
+  // Render the header
   return (
     <header className="sticky top-0 z-30 flex items-center justify-between p-4 border-b shadow-sm bg-background/80 backdrop-blur-md">
       <div className="flex items-center gap-3">
@@ -86,6 +61,7 @@ export function AppHeader({ title }: AppHeaderProps) {
             <Utensils className="w-8 h-8 text-primary group-hover:text-primary/80" />
           </Link>
         ) : (
+          // Static icon if already on the home page
           <Utensils className="w-8 h-8 text-primary" />
         )}
         <h1 className="text-xl font-semibold tracking-tight md:text-2xl text-foreground">{title}</h1>
