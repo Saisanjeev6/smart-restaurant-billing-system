@@ -119,6 +119,9 @@ export default function AdminPage() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
 
+  const calculateOrderTotal = useCallback((items: OrderItem[]) => {
+    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, []);
   
   const formatPeriodLabel = useCallback((period: AnalyticsPeriod, start?: Date, end?: Date): string => {
     if (!start || !end && period === 'custom') return 'Custom range not set';
@@ -213,7 +216,7 @@ export default function AdminPage() {
       averageOrderValue,
       periodLabel: periodLabelValue
     };
-  }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, formatPeriodLabel]);
+  }, [billedOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, formatPeriodLabel, calculateOrderTotal]);
 
   const monthlyChartData = useMemo(() => {
     const salesByMonth: { [monthYear: string]: { month: string, monthNumeric: number, year: number, totalSales: number } } = {};
@@ -245,7 +248,7 @@ export default function AdminPage() {
     }
     return chartDataPoints.sort((a, b) => (a.year * 100 + a.monthNumeric) - (b.year * 100 + b.monthNumeric));
 
-  }, [billedOrders]);
+  }, [billedOrders, calculateOrderTotal]);
 
   const orderDetailsForTipTool = useMemo(() => {
     if (orderForBill && currentBill) {
@@ -279,10 +282,6 @@ export default function AdminPage() {
         return () => clearInterval(intervalId);
     }
   }, [isMounted, loadAllOrders]);
-
-
-  const calculateOrderTotal = (items: OrderItem[]) => items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  
 
   const handleFetchBill = () => {
     if (!selectedTableForBill) {
