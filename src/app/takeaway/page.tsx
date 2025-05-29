@@ -149,7 +149,7 @@ export default function TakeawayPage() {
       status: 'pending', 
       timestamp: new Date().toISOString(),
       type: 'takeaway',
-      waiterId: currentUser?.id, // Assign waiter if logged in
+      waiterId: currentUser?.id, 
       waiterUsername: currentUser?.username,
     };
     addOrUpdateSharedOrder(newOrder); 
@@ -187,7 +187,7 @@ export default function TakeawayPage() {
   const handlePrintBill = () => {
     if (currentBill?.paymentStatus === 'paid') {
       console.log("Takeaway: Attempting to print bill...");
-      window.print();
+      setTimeout(() => window.print(), 100); 
     } else {
       toast({ title: 'Error', description: 'Bill must be paid before printing.', variant: 'destructive' });
     }

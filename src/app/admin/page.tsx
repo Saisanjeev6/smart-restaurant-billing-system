@@ -100,14 +100,29 @@ export default function AdminPage() {
   const [billRequests, setBillRequests] = useState<Order[]>([]);
   const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
   const [taxRate, setTaxRate] = useState(0.08);
+  
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      router.push('/login');
+    } else {
+      setCurrentUser(user);
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
+      setMenuOptions(getMenuItems()); // Load menu options
+      setIsMounted(true);
+    }
+  }, [router]);
+
 
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
-    if (menuOptions.length === 0) {
+    if (menuOptions.length === 0) { // Fallback if menu options not loaded
+        // console.log("DEBUG calculateOrderTotal: Using item.price directly as menuOptions empty", items);
         return items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
     }
     return items.reduce((sum, item) => {
         const currentMenuItem = menuOptions.find(mi => mi.id === item.id);
         const priceToUse = currentMenuItem ? currentMenuItem.price : Number(item.price) || 0;
+        // console.log(`DEBUG calculateOrderTotal: Item: ${item.name}, Original Price: ${item.price}, Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}`);
         return sum + (priceToUse * (Number(item.quantity) || 0));
     }, 0);
   }, [menuOptions]);
@@ -257,11 +272,11 @@ export default function AdminPage() {
         const currentMenuItem = menuOptions.find(menuItem => menuItem.id === item.id);
         const priceToUse = currentMenuItem ? currentMenuItem.price : Number(item.price) || 0;
 
-        if (item.name === 'Mushroom Risotto' || item.name === 'Creamy Pasta Carbonara' || item.name === 'Margherita Pizza') {
-             console.log(
-                `DEBUG salesByMenuItem: Processing ${item.name}. Order Item Price: ${item.price}, Current Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}, Qty: ${item.quantity}, Order ID: ${order.id}`
-            );
-        }
+        // if (item.name === 'Mushroom Risotto' || item.name === 'Creamy Pasta Carbonara' || item.name === 'Margherita Pizza') {
+        //      console.log(
+        //         `DEBUG salesByMenuItem: Processing ${item.name}. Order Item Price: ${item.price}, Current Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}, Qty: ${item.quantity}, Order ID: ${order.id}`
+        //     );
+        // }
 
         if (!itemSales[item.id]) {
           itemSales[item.id] = { name: item.name, quantitySold: 0, totalSales: 0, category: item.category };
@@ -313,7 +328,7 @@ export default function AdminPage() {
     if(!isMounted) return;
     const ordersFromStorage = getSharedOrders();
     setAllOrders(ordersFromStorage);
-    setTaxRate(getTaxRate());
+    setTaxRate(getTaxRate()); // Ensure tax rate is up-to-date
 
     const currentBillRequests = ordersFromStorage.filter(
         order => order.status === 'bill_requested' && order.type === 'dine-in'
@@ -342,18 +357,6 @@ export default function AdminPage() {
   }, [isMounted, toast, displayedBillRequestNotifications]);
 
   useEffect(() => {
-    const user = getCurrentUser();
-    if (!user || user.role !== 'admin') {
-      router.push('/login');
-    } else {
-      setCurrentUser(user);
-      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
-      setMenuOptions(getMenuItems());
-      setIsMounted(true);
-    }
-  }, [router]);
-
-  useEffect(() => {
     if(isMounted){
         loadAllOrdersAndSettings();
         const intervalId = setInterval(loadAllOrdersAndSettings, 7000);
@@ -364,13 +367,14 @@ export default function AdminPage() {
 
   const handleSelectBillRequest = (order: Order) => {
     setOrderForBill(order);
+    // Ensure items reflect current menu pricing for the bill generation
     const itemsForBill = order.items.map(item => {
         const menuItemDetails = menuOptions.find(mi => mi.id === item.id);
         return menuItemDetails ? { ...item, price: menuItemDetails.price, name: menuItemDetails.name, category: menuItemDetails.category } : item;
     });
 
     const subtotal = itemsForBill.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
-    const currentTaxRate = getTaxRate();
+    const currentTaxRate = getTaxRate(); // Use dynamic tax rate
     const taxAmount = subtotal * currentTaxRate;
     const totalAmount = subtotal + taxAmount;
 
@@ -421,15 +425,17 @@ export default function AdminPage() {
       }
     }
 
-    if (orderIsNowPaid) { // This covers orders that just became 'paid' or were already 'paid'
+    if (orderIsNowPaid) { 
       console.log("Admin: Attempting to print bill...");
-      window.print();
       setTimeout(() => {
-        setOrderForBill(null);
-        setCurrentBill(null);
-        setDiscountPercentage(0);
-        loadAllOrdersAndSettings();
-      }, 200);
+        window.print();
+        setTimeout(() => {
+            setOrderForBill(null);
+            setCurrentBill(null);
+            setDiscountPercentage(0);
+            loadAllOrdersAndSettings();
+        }, 200); // Delay clearing to allow print dialog to fully process
+      }, 100); // Delay print to allow DOM to update
     } else {
       toast({ title: 'Action Needed', description: `Order status is "${orderForBill.status}". Finalize payment to print.`, variant: 'default'});
     }
