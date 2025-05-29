@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getMenuItems } from '@/lib/menuManager';
 import { getTableNumbersArray } from '@/lib/restaurantSettings';
 import type { MenuItem as MenuItemType, Order, OrderItem, User, OrderStatus } from '@/types';
-import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon, CookingPot } from 'lucide-react'; // Added CookingPot
+import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon, CookingPot, MessageSquare } from 'lucide-react'; // Added MessageSquare
 import Image from 'next/image';
 import {
   AlertDialog,
@@ -31,6 +31,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getCurrentUser } from '@/lib/auth';
 import { getSharedOrders, addOrUpdateSharedOrder, updateSharedOrderStatus } from '@/lib/orderManager';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 type TableDisplayStatus = 'vacant' | 'selected' | 'occupied_pending' | 'occupied_preparing' | 'occupied_ready' | 'occupied_bill_requested';
 
@@ -39,10 +40,11 @@ export default function WaiterPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedTable, setSelectedTable] = useState<string>('');
-  const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
+  const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]); // Items for current submission
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
+  const [itemComment, setItemComment] = useState<string>(''); // New state for item comment
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]); // All orders managed in this session by this waiter
   const { toast } = useToast();
 
   const [isBillConfirmOpen, setIsBillConfirmOpen] = useState(false);
@@ -83,8 +85,8 @@ export default function WaiterPage() {
   const loadActiveOrders = useCallback(() => {
     if (!isMounted) return;
     const orders = getSharedOrders();
-    setActiveOrders(orders);
-    setTableNumbers(getTableNumbersArray());
+    setActiveOrders(orders); // Load all orders for status checking
+    setTableNumbers(getTableNumbersArray()); // Refresh table numbers
 
     if(currentUser) {
       const readyOrdersForThisWaiter = orders.filter(
@@ -96,7 +98,7 @@ export default function WaiterPage() {
         readyOrdersForThisWaiter.forEach(order => {
           toast({
             title: 'Order Ready!',
-            description: `Order for ${order.type === 'dine-in' ? `Table ${order.tableNumber}` : `Token ${order.id.slice(-6)}`} is ready for pickup.`,
+            description: `Order for ${order.type === 'dine-in' && order.tableNumber ? `Table ${order.tableNumber}` : `Token ${order.id.slice(-6)}`} is ready for pickup.`,
             variant: 'default',
             duration: 7000,
           });
@@ -110,11 +112,12 @@ export default function WaiterPage() {
   useEffect(() => {
     if(isMounted){
         loadActiveOrders();
-        const intervalId = setInterval(loadActiveOrders, 7000);
+        const intervalId = setInterval(loadActiveOrders, 7000); // Poll every 7 seconds
         return () => clearInterval(intervalId);
     }
   }, [isMounted, loadActiveOrders]);
 
+  // This memo finds THE one pending order for the currently selected table from ALL active orders.
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
@@ -133,7 +136,8 @@ export default function WaiterPage() {
 
   const handleSelectTable = (tableNum: number) => {
     setSelectedTable(String(tableNum));
-    setCurrentOrderItems([]); // Clear any items from a previously selected table/new order form
+    setCurrentOrderItems([]); 
+    setItemComment(''); 
   };
 
   const handleAddItemToOrder = () => {
@@ -148,22 +152,36 @@ export default function WaiterPage() {
     const menuItem = menuOptions.find(item => item.id === selectedMenuItemId);
     if (!menuItem) return;
 
+    const newOrderItem: OrderItem = {
+      ...menuItem,
+      quantity,
+      comment: itemComment.trim() || undefined, // Add comment, make undefined if empty
+    };
+
     setCurrentOrderItems(prevItems => {
-      const existingItemIndex = prevItems.findIndex(item => item.id === menuItem.id);
+      // Check if an item with the same ID AND same comment already exists in currentOrderItems
+      // For simplicity, we'll treat items with different comments (even if ID is same) as distinct for this "current selection"
+      // A more complex merge could happen on submit if needed, but this is usually fine.
+      const existingItemIndex = prevItems.findIndex(item => item.id === newOrderItem.id && item.comment === newOrderItem.comment);
+      
       if (existingItemIndex > -1) {
         const updatedItems = [...prevItems];
-        updatedItems[existingItemIndex].quantity += quantity;
+        updatedItems[existingItemIndex].quantity += newOrderItem.quantity;
         return updatedItems;
       } else {
-        return [...prevItems, { ...menuItem, quantity }];
+        return [...prevItems, newOrderItem];
       }
     });
+
     setSelectedMenuItemId('');
     setQuantity(1);
+    setItemComment(''); // Clear comment field
   };
 
-  const handleRemoveItemFromCurrentSelection = (itemId: string) => {
-    setCurrentOrderItems(currentOrderItems.filter(item => item.id !== itemId));
+  const handleRemoveItemFromCurrentSelection = (itemId: string, itemCommentVal?: string) => {
+    setCurrentOrderItems(prevItems => 
+        prevItems.filter(item => !(item.id === itemId && item.comment === itemCommentVal))
+    );
   };
 
   const handleSubmitOrder = () => {
@@ -179,35 +197,35 @@ export default function WaiterPage() {
     const tableNum = parseInt(selectedTable);
     let orderToUpdate: Order;
 
-    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'billed' && o.status !== 'paid' && o.status !== 'cancelled');
+    const existingOrderForTable = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'billed' && o.status !== 'paid' && o.status !== 'cancelled');
 
-    if (existingOrder) {
-      orderToUpdate = { ...existingOrder };
-
-      const updatedItemsMap = new Map<string, OrderItem>();
-      orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item}));
+    if (existingOrderForTable) {
+      orderToUpdate = { ...existingOrderForTable, items: [...existingOrderForTable.items] }; // Deep copy items array
 
       currentOrderItems.forEach(newItem => {
-        if (updatedItemsMap.has(newItem.id)) {
-          const currentItem = updatedItemsMap.get(newItem.id)!;
-          currentItem.quantity += newItem.quantity;
+        const existingItemInOrderIndex = orderToUpdate.items.findIndex(
+          item => item.id === newItem.id && item.comment === newItem.comment
+        );
+        if (existingItemInOrderIndex > -1) {
+          orderToUpdate.items[existingItemInOrderIndex].quantity += newItem.quantity;
         } else {
-          updatedItemsMap.set(newItem.id, {...newItem});
+          orderToUpdate.items.push({...newItem});
         }
       });
-      orderToUpdate.items = Array.from(updatedItemsMap.values());
+      
       orderToUpdate.timestamp = new Date().toISOString();
-      // If order was 'ready' or 'served', adding new items reverts it to 'pending' or 'preparing' as appropriate.
-      // For simplicity here, we'll set it to pending. Kitchen can then move to 'preparing'.
-      orderToUpdate.status = 'pending';
-
-
+      if (orderToUpdate.status === 'ready' || orderToUpdate.status === 'served' || orderToUpdate.status === 'bill_requested') {
+         orderToUpdate.status = 'pending'; // Revert to pending if new items are added to an order that was further along
+      } else if (!orderToUpdate.status) {
+         orderToUpdate.status = 'pending';
+      }
+      
       toast({ title: 'Order Updated', description: `Items added/updated for Table ${selectedTable}. Sent to kitchen.` });
     } else {
       orderToUpdate = {
         id: `ORD-${Date.now()}`,
         tableNumber: tableNum,
-        items: [...currentOrderItems],
+        items: [...currentOrderItems], // Ensure fresh copy
         status: 'pending',
         timestamp: new Date().toISOString(),
         type: 'dine-in',
@@ -218,9 +236,9 @@ export default function WaiterPage() {
     }
 
     addOrUpdateSharedOrder(orderToUpdate);
-    setCurrentOrderItems([]);
-    loadActiveOrders();
-    // setSelectedTable(''); // Optionally clear selected table after submission
+    setCurrentOrderItems([]); // Clear current selection
+    setItemComment(''); // Clear comment field
+    loadActiveOrders(); // Refresh the active orders to reflect the submission
   };
 
   const handleRequestBillForSelectedTable = () => {
@@ -252,10 +270,11 @@ export default function WaiterPage() {
       toast({ title: 'Error', description: 'Failed to request bill.', variant: 'destructive' });
     }
 
-    setCurrentOrderItems([]); // Clear items in form
+    setCurrentOrderItems([]);
+    setItemComment('');
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
-    // setSelectedTable(''); // Clear selected table after billing to return to overview
+    // setSelectedTable(''); // Keep table selected, allows waiter to see the "bill requested" status
   };
 
   const getStatusBadgeClass = (status: OrderStatus): string => {
@@ -369,8 +388,8 @@ export default function WaiterPage() {
                     <CardTitle className="text-xl">Create / Add to Order for Table {selectedTable}</CardTitle>
                     <CardDescription>Add items to the current selection for Table {selectedTable}.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-2">
+                  <CardContent className="space-y-4"> {/* Changed from space-y-6 */}
+                    <div className="space-y-1"> {/* Changed from space-y-2 */}
                       <Label htmlFor="menuItem">Menu Item</Label>
                       <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={menuOptions.length === 0}>
                         <SelectTrigger id="menuItem">
@@ -393,7 +412,7 @@ export default function WaiterPage() {
                       </Select>
                       {menuOptions.length === 0 && <p className="text-xs text-muted-foreground">Menu is empty. Admin needs to add items.</p>}
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-1"> {/* Changed from space-y-2 */}
                       <Label htmlFor="quantity">Quantity</Label>
                       <Input
                         id="quantity"
@@ -401,6 +420,16 @@ export default function WaiterPage() {
                         min="1"
                         value={quantity}
                         onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="space-y-1"> {/* New field for Item Comment */}
+                      <Label htmlFor="itemComment">Item Comment (Optional)</Label>
+                      <Input
+                        id="itemComment"
+                        type="text"
+                        placeholder="e.g., Extra spicy, no onions"
+                        value={itemComment}
+                        onChange={(e) => setItemComment(e.target.value)}
                       />
                     </div>
                     <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || menuOptions.length === 0}>
@@ -420,13 +449,18 @@ export default function WaiterPage() {
                         <p className="text-muted-foreground text-center py-4">No items in current selection for Table {selectedTable}.</p>
                       ) : (
                         <ul className="space-y-3 max-h-48 overflow-y-auto">
-                          {currentOrderItems.map(item => (
-                            <li key={item.id + Math.random()} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
+                          {currentOrderItems.map((item, index) => (
+                            <li key={`${item.id}-${item.comment || 'no-comment'}-${index}`} className="flex items-start justify-between p-3 rounded-md bg-secondary/50">
                               <div>
                                 <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
+                                {item.comment && (
+                                  <p className="text-xs text-muted-foreground italic flex items-center gap-1">
+                                    <MessageSquare className="w-3 h-3"/> {item.comment}
+                                  </p>
+                                )}
                                 <p className="text-sm text-primary">₹{(item.price * item.quantity).toFixed(2)}</p>
                               </div>
-                              <Button variant="ghost" size="icon" onClick={() => handleRemoveItemFromCurrentSelection(item.id)}>
+                              <Button variant="ghost" size="icon" onClick={() => handleRemoveItemFromCurrentSelection(item.id, item.comment)}>
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </Button>
                             </li>
@@ -465,12 +499,17 @@ export default function WaiterPage() {
                     <CardContent>
                       {pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 ? (
                         <ul className="space-y-2 max-h-60 overflow-y-auto">
-                          {pendingOrderForSelectedTable.items.map(item => (
-                            <li key={item.id + Math.random()} className="p-2 rounded-md bg-muted/30">
+                          {pendingOrderForSelectedTable.items.map((item, index) => (
+                            <li key={`${item.id}-${item.comment || 'no-comment'}-${index}`} className="p-2 rounded-md bg-muted/30">
                               <div className="flex justify-between items-center">
                                   <span>{item.name} (x{item.quantity})</span>
                                   <span>₹{(item.price * item.quantity).toFixed(2)}</span>
                               </div>
+                               {item.comment && (
+                                <p className="text-xs text-muted-foreground italic flex items-center gap-1 mt-0.5">
+                                   <MessageSquare className="w-3 h-3"/> {item.comment}
+                                </p>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -541,10 +580,15 @@ export default function WaiterPage() {
                         <details className="text-xs mt-1">
                             <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View Items ({order.items.length})</summary>
                             <ul className="mt-1 list-disc list-inside pl-4 space-y-0.5 text-muted-foreground">
-                            {order.items.map(item => <li key={item.id + order.id}>{item.name} x{item.quantity} (₹{(item.price * item.quantity).toFixed(2)})</li>)}
+                            {order.items.map((item, index) => (
+                                <li key={`${item.id}-${index}`}>
+                                    {item.name} x{item.quantity} (₹{(item.price * item.quantity).toFixed(2)})
+                                    {item.comment && <span className="italic ml-1 text-xs">- "{item.comment}"</span>}
+                                </li>
+                            ))}
                             </ul>
                         </details>
-                        <p className="mt-2 text-xs text-muted-foreground/80">Last update: {new Date(order.timestamp).toLocaleTimeString()}</p>
+                        <p className="mt-2 text-xs text-muted-foreground/80">Last update: {format(new Date(order.timestamp),"PPpp")}</p>
                       </li>
                     ))}
                   </ul>
@@ -566,9 +610,10 @@ export default function WaiterPage() {
               <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
                   <p className="font-semibold">Items for Billing:</p>
                   <ul className="list-disc list-inside pl-4">
-                      {orderForBillConfirmation.items.map(item => (
-                          <li key={item.id + Math.random()}>
+                      {orderForBillConfirmation.items.map((item, index) => (
+                          <li key={`${item.id}-${index}`}>
                               {item.name} (x{item.quantity}) - ₹{(item.price * item.quantity).toFixed(2)}
+                              {item.comment && <p className="text-xs italic flex items-center gap-1"><MessageSquare className="w-3 h-3"/> {item.comment}</p>}
                           </li>
                       ))}
                   </ul>

@@ -9,10 +9,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import type { Order, User } from '@/types';
+import type { Order, User, OrderItem } from '@/types';
 import { getCurrentUser } from '@/lib/auth';
 import { getSharedOrders, updateSharedOrderStatus } from '@/lib/orderManager';
-import { Soup, CheckCircle2, Utensils, ListOrdered, Clock, CookingPot, ThumbsUp } from 'lucide-react';
+import { Soup, CheckCircle2, Utensils, ListOrdered, Clock, CookingPot, ThumbsUp, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
 
 export default function KitchenPage() {
@@ -35,17 +35,16 @@ export default function KitchenPage() {
   const loadOrders = useCallback(() => {
     if (!isMounted) return;
     const allOrders = getSharedOrders();
-    // Kitchen sees 'pending' and 'preparing' orders
     const relevantOrders = allOrders
       .filter(order => order.status === 'pending' || order.status === 'preparing')
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()); // Oldest first
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     setKitchenOrders(relevantOrders);
   }, [isMounted]);
 
   useEffect(() => {
     if (isMounted) {
       loadOrders();
-      const intervalId = setInterval(loadOrders, 5000); // Refresh every 5 seconds
+      const intervalId = setInterval(loadOrders, 5000);
       return () => clearInterval(intervalId);
     }
   }, [isMounted, loadOrders]);
@@ -80,6 +79,17 @@ export default function KitchenPage() {
       default: return 'bg-gray-500 text-white';
     }
   };
+
+  const renderOrderItem = (item: OrderItem, index: number) => (
+    <li key={`${item.id}-${index}`} className="ml-2">
+      {item.name} <span className="font-semibold">x{item.quantity}</span>
+      {item.comment && (
+        <p className="text-xs italic text-orange-600 flex items-center gap-1">
+          <MessageSquare className="w-3 h-3" /> {item.comment}
+        </p>
+      )}
+    </li>
+  );
 
 
   if (!isMounted || !currentUser) {
@@ -127,11 +137,7 @@ export default function KitchenPage() {
                     <CardContent className="flex-grow space-y-2">
                       <p className="font-medium text-sm text-muted-foreground">Items:</p>
                       <ul className="space-y-1 text-sm list-disc list-inside pl-2 max-h-40 overflow-y-auto">
-                        {order.items.map(item => (
-                          <li key={item.id + Math.random()} className="ml-2">
-                            {item.name} <span className="font-semibold">x{item.quantity}</span>
-                          </li>
-                        ))}
+                        {order.items.map(renderOrderItem)}
                       </ul>
                     </CardContent>
                     <CardFooter>
@@ -181,11 +187,7 @@ export default function KitchenPage() {
                     <CardContent className="flex-grow space-y-2">
                       <p className="font-medium text-sm text-muted-foreground">Items:</p>
                       <ul className="space-y-1 text-sm list-disc list-inside pl-2 max-h-40 overflow-y-auto">
-                        {order.items.map(item => (
-                          <li key={item.id + Math.random()} className="ml-2">
-                            {item.name} <span className="font-semibold">x{item.quantity}</span>
-                          </li>
-                        ))}
+                        {order.items.map(renderOrderItem)}
                       </ul>
                     </CardContent>
                     <CardFooter>

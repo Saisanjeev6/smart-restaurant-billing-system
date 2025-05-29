@@ -15,6 +15,7 @@ export interface NewMenuItem {
 
 export interface OrderItem extends MenuItem {
   quantity: number;
+  comment?: string; // Optional comment for the specific order item
 }
 
 export type OrderStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'bill_requested' | 'billed' | 'paid' | 'cancelled';
@@ -57,4 +58,3 @@ export interface NewUserCredentials {
   password?: string; // Password is required for creation
   role: 'waiter' | 'kitchen'; // Admin can create waiters or kitchen staff
 }
-

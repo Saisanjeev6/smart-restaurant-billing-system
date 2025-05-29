@@ -18,7 +18,7 @@ import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageUsersTool } from './components/ManageUsersTool';
 import { ManageMenuTool } from './components/ManageMenuTool';
 import { RestaurantSettingsTool } from './components/RestaurantSettingsTool';
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus, SettingsIcon, CookingPot } from 'lucide-react'; // Added CookingPot
+import { FileText, Percent, Sparkles, ListChecks, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus, SettingsIcon, CookingPot, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
 import { getMenuItems } from '@/lib/menuManager';
@@ -33,7 +33,7 @@ import { Badge } from '@/components/ui/badge';
 
 const MOCK_ORDERS_SEED: Order[] = [
   {
-    id: 'ORD-1001', tableNumber: 3, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
+    id: 'ORD-1001', tableNumber: 3, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1, comment: "Well done" }],
     status: 'paid', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
@@ -41,7 +41,7 @@ const MOCK_ORDERS_SEED: Order[] = [
     status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'TAKE-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
+    id: 'TAKE-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1, comment: "Extra cheese" }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
     status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway'
   },
   {
@@ -73,7 +73,7 @@ const MOCK_ORDERS_SEED: Order[] = [
     status: 'paid', timestamp: new Date().toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'ORD-1011', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1 }],
+    id: 'ORD-1011', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Less salt" }],
     status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
@@ -89,7 +89,7 @@ const MOCK_ORDERS_SEED: Order[] = [
     status: 'bill_requested', timestamp: new Date(Date.now() - 120000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'ORD-1013', tableNumber: 12, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1 }],
+    id: 'ORD-1013', tableNumber: 12, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Make it quick!" }],
     status: 'preparing', timestamp: new Date(Date.now() - 60000 * 5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
 ];
@@ -199,7 +199,7 @@ export default function AdminPage() {
       }
     } else if (selectedAnalyticsPeriod === 'custom') {
       periodLabelValue = 'Please select a start and end date for the custom range.';
-    } else if (startDate) { // For non-custom cases where endDate is derived or implicitly now
+    } else if (startDate) { 
         periodLabelValue = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
          filteredOrders = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
@@ -239,17 +239,15 @@ export default function AdminPage() {
 
     const chartDataPoints = [];
     const now = new Date();
-    for (let i = 5; i >= 0; i--) { // Iterate for the last 6 months (0 to 5 months ago)
+    for (let i = 5; i >= 0; i--) { 
       const targetMonthDate = subMonths(now, i);
       const monthYearStr = format(targetMonthDate, 'MMM yyyy');
       if (salesByMonth[monthYearStr]) {
         chartDataPoints.push(salesByMonth[monthYearStr]);
       } else {
-         // Add a data point with 0 sales if no sales for that month
          chartDataPoints.push({ month: monthYearStr, monthNumeric: getMonth(targetMonthDate), year: getYear(targetMonthDate), totalSales: 0 });
       }
     }
-    // Sort ensures that even if months are added out of order (e.g., by processing older data first), they appear correctly.
     return chartDataPoints.sort((a, b) => (a.year * 100 + a.monthNumeric) - (b.year * 100 + b.monthNumeric));
 
   }, [paidOrders, calculateOrderTotal]);
@@ -273,7 +271,6 @@ export default function AdminPage() {
     setBillRequests(currentBillRequests);
 
 
-    // Bill Request Notifications
     const newUnseenRequests = currentBillRequests.filter(
         order => !displayedBillRequestNotifications.has(order.id)
     );
@@ -309,7 +306,7 @@ export default function AdminPage() {
   useEffect(() => {
     if(isMounted){
         loadAllOrders();
-        const intervalId = setInterval(loadAllOrders, 7000); // Poll every 7 seconds
+        const intervalId = setInterval(loadAllOrders, 7000); 
         return () => clearInterval(intervalId);
     }
   }, [isMounted, loadAllOrders]);
@@ -325,11 +322,11 @@ export default function AdminPage() {
       subtotal,
       taxRate: TAX_RATE,
       taxAmount,
-      discountAmount: 0, // Reset discount when loading a new bill
+      discountAmount: 0, 
       totalAmount,
-      paymentStatus: order.status === 'paid' ? 'paid' : 'pending', // Reflect actual order status
+      paymentStatus: order.status === 'paid' ? 'paid' : 'pending', 
     });
-    setDiscountPercentage(0); // Reset discount percentage input
+    setDiscountPercentage(0); 
     toast({ title: 'Bill Loaded', description: `Bill for Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) is ready.` });
   };
 
@@ -350,16 +347,14 @@ export default function AdminPage() {
 
     let paymentFinalized = orderForBill.status === 'paid';
 
-    // If the order was 'bill_requested', finalize payment first
     if (orderForBill.status === 'bill_requested') {
-      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100; // Use state for discount
+      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100; 
       const finalTotal = currentBill.subtotal + currentBill.taxAmount - currentDiscount;
       
       const success = updateSharedOrderStatus(orderForBill.id, 'paid');
       if (success) {
-        // Update the local state for currentBill and orderForBill to reflect 'paid' status
         setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid', discountAmount: currentDiscount, totalAmount: finalTotal } : null);
-        setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null); // Update local order copy
+        setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null); 
 
         toast({
           title: 'Bill Finalized',
@@ -368,21 +363,19 @@ export default function AdminPage() {
         paymentFinalized = true;
       } else {
         toast({ title: 'Error', description: `Failed to mark order ...${orderForBill.id.slice(-6)} as paid.`, variant: 'destructive' });
-        return; // Stop if payment finalization fails
+        return; 
       }
     }
 
-    // Proceed to print if payment is finalized (either initially 'paid' or just became 'paid')
     if (paymentFinalized) {
         window.print();
-        // Optionally clear the bill form after printing
         setTimeout(() => {
             setOrderForBill(null);
             setCurrentBill(null);
             setDiscountPercentage(0);
-            loadAllOrders(); // Refresh the list of requests
-        }, 100); // Delay to allow print dialog to appear
-    } else if (orderForBill.status !== 'bill_requested' && orderForBill.status === 'paid') { // For reprinting an already paid bill (not via bill_requested)
+            loadAllOrders(); 
+        }, 100); 
+    } else if (orderForBill.status !== 'bill_requested' && orderForBill.status === 'paid') { 
         toast({ title: 'Printing Bill (Reprint)', description: 'Printing current bill details.' });
         window.print();
     }
@@ -531,9 +524,12 @@ export default function AdminPage() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <ul className="space-y-1 text-sm max-h-40 overflow-y-auto">
-                      {orderForBill.items.map(item => (
-                        <li key={item.id} className="flex justify-between">
-                          <span>{item.name} x{item.quantity}</span>
+                      {orderForBill.items.map((item, index) => (
+                        <li key={`${item.id}-${index}`} className="flex justify-between">
+                          <div>
+                            <span>{item.name} x{item.quantity}</span>
+                            {item.comment && <p className="text-xs italic text-muted-foreground ml-2 flex items-center gap-1"><MessageSquare className="w-3 h-3"/> {item.comment}</p>}
+                          </div>
                           <span>₹{(item.price * item.quantity).toFixed(2)}</span>
                         </li>
                       ))}
@@ -547,7 +543,6 @@ export default function AdminPage() {
                     <Separator />
                     <div className="flex justify-between text-lg font-bold"><p>Total:</p><p>₹{currentBill.totalAmount.toFixed(2)}</p></div>
 
-                    {/* Discount input only if order status is 'bill_requested' and payment is 'pending' */}
                     {currentBill.paymentStatus === 'pending' && orderForBill.status === 'bill_requested' && (
                       <>
                         <Separator />
@@ -569,13 +564,12 @@ export default function AdminPage() {
                         className="w-full" 
                         variant={orderForBill.status === 'bill_requested' ? 'default' : 'outline'}
                         size="lg" 
-                        // Disable if not a bill_requested or already paid order
                         disabled={!currentBill || (orderForBill.status !== 'bill_requested' && orderForBill.status !== 'paid')}
                       >
                         <Printer className="mr-2 h-4 w-4" /> 
                         {orderForBill.status === 'bill_requested' ? 'Finalize Payment & Print Bill' 
                           : orderForBill.status === 'paid' ? 'Print Bill (Reprint)' 
-                          : 'Print Bill' /* Fallback, should ideally not be hit in this flow */ }
+                          : 'Print Bill' }
                      </Button>
                   </CardFooter>
                 </Card>
@@ -620,7 +614,6 @@ export default function AdminPage() {
                         size="sm"
                         onClick={() => {
                           setSelectedAnalyticsPeriod(period.value);
-                          // Reset custom dates if another period is chosen
                           if (period.value !== 'custom') {
                             setCustomStartDate(undefined);
                             setCustomEndDate(undefined);
@@ -655,7 +648,7 @@ export default function AdminPage() {
                               selected={customStartDate}
                               onSelect={(date) => {
                                 setCustomStartDate(date);
-                                if (date && customEndDate && date > customEndDate) setCustomEndDate(undefined); // Invalidate end date if start is after
+                                if (date && customEndDate && date > customEndDate) setCustomEndDate(undefined); 
                               }}
                               initialFocus
                             />
@@ -683,7 +676,7 @@ export default function AdminPage() {
                               mode="single"
                               selected={customEndDate}
                               onSelect={setCustomEndDate}
-                              disabled={(date) => (customStartDate && date < customStartDate) || date > new Date()} // Disable future dates and dates before start
+                              disabled={(date) => (customStartDate && date < customStartDate) || date > new Date()} 
                               initialFocus
                             />
                           </PopoverContent>
@@ -733,7 +726,7 @@ export default function AdminPage() {
                           tickLine={false}
                           axisLine={false}
                           tickMargin={8}
-                          tickFormatter={(value) => value.slice(0, 3)} // Shorten month name e.g., "Jan"
+                          tickFormatter={(value) => value.slice(0, 3)} 
                         />
                         <YAxis
                           tickFormatter={(value) => `₹${value}`}
