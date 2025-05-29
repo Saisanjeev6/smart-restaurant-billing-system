@@ -200,7 +200,7 @@ export function ManageMenuTool() {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.category}</TableCell>
                     <TableCell>₹{item.price.toFixed(2)}</TableCell>
-                    <TableCell className="text-right space-x-2">
+                    <TableCell className="text-right space-x-2"> {/* Added space-x-2 here */}
                       <Button variant="outline" size="sm" onClick={() => handleEditItem(item)} disabled={isLoading || (isEditing && editingItemId === item.id)}>
                         <Pencil className="mr-1 h-3 w-3" /> Edit
                       </Button>
