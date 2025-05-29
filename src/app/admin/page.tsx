@@ -31,71 +31,42 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { Badge } from '@/components/ui/badge';
 
-// Carefully curated MOCK_ORDERS_SEED to debug analytics for Mushroom Risotto
-// Ensure prices here are accurate. If localStorage ('restaurant_shared_orders_v1') has old data,
-// it might override this seed. Clear localStorage to re-seed from this.
+// MOCK_ORDERS_SEED specifically for debugging analytics.
+// Prices for Mushroom Risotto, Carbonara, Pizza are intentionally set high and correct here.
+// USER: YOU MUST CLEAR localStorage 'restaurant_shared_orders_v1' for this to take effect.
 const MOCK_ORDERS_SEED: Order[] = [
+  // Paid Mushroom Risotto order 1
   {
-    id: 'ORD-MR-001', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Less salt" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
-  },
-  {
-    id: 'ORD-MR-002', tableNumber: 12, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Make it quick!" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
+    id: 'ORD-MR-FIX-001', tableNumber: 1, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Ensure hot" }],
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
     type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
-  // Other orders for context and testing other analytics features
+  // Paid Mushroom Risotto order 2
   {
-    id: 'ORD-1001', tableNumber: 3, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1, comment: "Well done" }],
-    status: 'paid', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    id: 'ORD-MR-FIX-002', tableNumber: 2, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Extra mushrooms if possible" }],
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), // 1 day ago
+    type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
+  },
+  // Paid Creamy Pasta Carbonara
+  {
+    id: 'ORD-CPC-FIX-001', tableNumber: 3, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }],
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString(), // 1.5 days ago
+    type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
+  // Paid Margherita Pizza
+  {
+    id: 'ORD-MP-FIX-001', tableNumber: 4, items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }],
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), // 0.5 days ago
+    type: 'takeaway'
+  },
+  // Other orders for context, ensure their prices are also reasonable
+  {
+    id: 'ORD-OTHER-001', tableNumber: 5, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }],
+    status: 'paid', timestamp: new Date(Date.now() - 3600000 * 5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'ORD-1002', tableNumber: 5, items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }, { id: '6', name: 'New York Cheesecake', price: 300, category: 'Dessert', quantity: 2 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
-  },
-  {
-    id: 'TAKE-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1, comment: "Extra cheese" }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
-    status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway'
-  },
-  {
-    id: 'ORD-1004', tableNumber: 1, items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }],
-    status: 'ready', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-   {
-    id: 'TAKE-002', items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }],
-    status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway'
-  },
-   {
-    id: 'ORD-1006', tableNumber: 4, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
+    id: 'ORD-ACTIVE-001', tableNumber: 6, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
     status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
-  },
-  {
-    id: 'ORD-1007', tableNumber: 7, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 3).setHours(14)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-   {
-    id: 'ORD-1008', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }, { id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
-    tableNumber: 10, status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 10).setHours(19)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
-  },
-  {
-    id: 'ORD-1009', tableNumber: 2, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-   {
-    id: 'ORD-1010', tableNumber: 6, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 2 }],
-    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 0.2).setHours(20)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-  {
-    id: 'TAKE-004', items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
-    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 4)).setHours(12)).toISOString(), type: 'takeaway'
-  },
-   {
-    id: 'TAKE-005', items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 5)).setDate(5)).toISOString(), type: 'takeaway'
-  },
-  {
-    id: 'ORD-1012', tableNumber: 11, items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 1 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
-    status: 'bill_requested', timestamp: new Date(Date.now() - 120000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
 ];
 
@@ -212,13 +183,14 @@ export default function AdminPage() {
       }
     } else if (selectedAnalyticsPeriod === 'custom') {
       periodLabelValue = 'Please select a start and end date for the custom range.';
-    } else if (startDate) {
+    } else if (startDate) { // For non-custom periods where endDate is derived (e.g. end of today)
         periodLabelValue = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
          filteredOrdersForPeriod = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
           return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
     }
+
 
     const totalSales = filteredOrdersForPeriod.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
     const totalOrders = filteredOrdersForPeriod.length;
@@ -279,6 +251,10 @@ export default function AdminPage() {
 
     analyticsData.filteredOrders.forEach(order => {
       order.items.forEach(item => {
+        // DEBUGGING LINE:
+        if (item.name === 'Mushroom Risotto') {
+          console.log('DEBUG salesByMenuItem: Processing Mushroom Risotto item in paid order:', JSON.stringify(item), 'from order ID:', order.id);
+        }
         if (!itemSales[item.id]) {
           itemSales[item.id] = { name: item.name, quantitySold: 0, totalSales: 0, category: item.category };
         }
@@ -918,3 +894,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
