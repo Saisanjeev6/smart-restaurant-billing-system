@@ -34,17 +34,17 @@ import { Badge } from '@/components/ui/badge';
 const MOCK_ORDERS_SEED: Order[] = [
   {
     id: 'ORD-MR-FIX-001', tableNumber: 1, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Ensure hot" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // ~2 days ago
     type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
     id: 'ORD-CPC-FIX-001', tableNumber: 3, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString(),
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString(), // ~1.5 days ago
     type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
     id: 'ORD-MP-FIX-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(),
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), // ~0.5 days ago
     type: 'takeaway'
   },
   {
@@ -108,13 +108,13 @@ export default function AdminPage() {
     } else {
       setCurrentUser(user);
       initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
-      setMenuOptions(getMenuItems()); // Load menu options
+      setMenuOptions(getMenuItems());
       setIsMounted(true);
     }
   }, [router]);
 
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
-    if (menuOptions.length === 0) {
+    if (menuOptions.length === 0) { // Fallback if menu options not loaded
         return items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
     }
     return items.reduce((sum, item) => {
@@ -398,40 +398,64 @@ export default function AdminPage() {
   const handlePrintAdminBill = () => {
     if (!currentBill || !orderForBill) {
       toast({ title: 'Error', description: 'No bill loaded to print.', variant: 'destructive' });
+      console.error("handlePrintAdminBill: currentBill or orderForBill is null/undefined at start.");
       return;
     }
+    console.log(`handlePrintAdminBill: Initiated. Order ID: ${orderForBill.id}, Status: ${orderForBill.status}`);
 
-    let orderIsNowPaid = orderForBill.status === 'paid';
+    let orderSuccessfullyProcessedToPaid = orderForBill.status === 'paid';
 
     if (orderForBill.status === 'bill_requested') {
+      console.log(`handlePrintAdminBill: Processing order ${orderForBill.id} from 'bill_requested' to 'paid'.`);
+      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100;
+      const finalTotal = currentBill.subtotal + currentBill.taxAmount - currentDiscount;
+
       const success = updateSharedOrderStatus(orderForBill.id, 'paid');
       if (success) {
-        setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid' } : null);
+        console.log(`handlePrintAdminBill: Successfully updated order ${orderForBill.id} to 'paid' in storage.`);
+        setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid', discountAmount: currentDiscount, totalAmount: finalTotal } : null);
         setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null);
         toast({
           title: 'Bill Finalized',
           description: `Order ...${orderForBill.id.slice(-6)} marked as paid. Preparing to print...`,
         });
-        orderIsNowPaid = true;
+        orderSuccessfullyProcessedToPaid = true;
       } else {
+        console.error(`handlePrintAdminBill: Failed to update order ${orderForBill.id} to 'paid' in storage.`);
         toast({ title: 'Error', description: `Failed to mark order ...${orderForBill.id.slice(-6)} as paid. Print cancelled.`, variant: 'destructive' });
         return;
       }
     }
 
-    if (orderIsNowPaid) { 
-      console.log("Admin: Attempting to print bill...");
+    if (orderSuccessfullyProcessedToPaid) {
+      console.log(`handlePrintAdminBill: Order ${orderForBill.id} is now 'paid'. Scheduling print.`);
       setTimeout(() => {
-        window.print();
+        // Conditional check for orderForBill, as its state might change due to re-renders before setTimeout executes
+        const currentOrderForBill = getSharedOrderById(orderForBill.id); // Re-fetch to ensure it's the latest
+        console.log(`handlePrintAdminBill: setTimeout for print is executing for order ${currentOrderForBill?.id}. Calling window.print().`);
+        if (document.hidden) {
+            console.warn("handlePrintAdminBill: Page is hidden, print dialog might be suppressed by the browser.");
+        }
+        try {
+            window.print(); // THE ACTUAL CALL
+        } catch (e) {
+            console.error("handlePrintAdminBill: Error calling window.print()", e);
+            toast({ title: 'Print Error', description: 'Could not open print dialog. Check browser console.', variant: 'destructive' });
+            return; 
+        }
+
+        console.log(`handlePrintAdminBill: Scheduling UI clear for order ${currentOrderForBill?.id}.`);
         setTimeout(() => {
+            console.log(`handlePrintAdminBill: Clearing UI for order ${currentOrderForBill?.id}.`);
             setOrderForBill(null);
             setCurrentBill(null);
             setDiscountPercentage(0);
             loadAllOrdersAndSettings();
-        }, 200); 
-      }, 150); // Increased delay for printing
+        }, 250); 
+      }, 200); 
     } else {
-      toast({ title: 'Action Needed', description: `Order status is "${orderForBill.status}". Finalize payment to print.`, variant: 'default'});
+      console.warn(`handlePrintAdminBill: Order ${orderForBill.id} not processed to paid and not initially paid. Status: ${orderForBill.status}. Button disabled logic might need review.`);
+      toast({ title: 'Action Needed', description: `Order status is "${orderForBill.status}". Cannot print yet.`, variant: 'default'});
     }
   };
 
@@ -616,14 +640,14 @@ export default function AdminPage() {
                      <Button
                         onClick={handlePrintAdminBill}
                         className="w-full"
-                        variant={orderForBill.status === 'bill_requested' ? 'default' : 'outline'}
+                        variant={orderForBill && orderForBill.status === 'bill_requested' ? 'default' : 'outline'}
                         size="lg"
-                        disabled={!currentBill || (orderForBill.status !== 'bill_requested' && orderForBill.status !== 'paid')}
+                        disabled={!currentBill || !orderForBill || (orderForBill.status !== 'bill_requested' && orderForBill.status !== 'paid')}
                       >
                         <Printer className="mr-2 h-4 w-4" />
-                        {orderForBill.status === 'bill_requested' ? 'Finalize Payment & Print Bill'
-                          : orderForBill.status === 'paid' ? 'Print Bill (Reprint)'
-                          : 'Print Bill' }
+                        {orderForBill && orderForBill.status === 'bill_requested' ? 'Finalize Payment & Print Bill'
+                          : orderForBill && orderForBill.status === 'paid' ? 'Print Bill (Reprint)'
+                          : 'Print Bill' /* Fallback, should be disabled */}
                      </Button>
                   </CardFooter>
                 </Card>
