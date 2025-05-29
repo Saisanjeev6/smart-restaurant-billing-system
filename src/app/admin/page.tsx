@@ -38,7 +38,7 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'ORD-1002', tableNumber: 5, items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }, { id: '6', name: 'New York Cheesecake', price: 300, category: 'Dessert', quantity: 2 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' // Different waiter
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' 
   },
   {
     id: 'TAKE-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1, comment: "Extra cheese" }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
@@ -58,11 +58,11 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'ORD-1007', tableNumber: 7, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 3).setHours(14)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' // Specific hour
+    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 3).setHours(14)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' 
   },
    {
     id: 'ORD-1008', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }, { id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
-    tableNumber: 10, status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 10).setHours(19)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' // older, specific hour
+    tableNumber: 10, status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 10).setHours(19)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' 
   },
   {
     id: 'ORD-1009', tableNumber: 2, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 1 }],
@@ -70,7 +70,7 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
    {
     id: 'ORD-1010', tableNumber: 6, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 2 }],
-    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 0.2).setHours(20)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' // recent, specific hour
+    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 0.2).setHours(20)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' 
   },
   {
     id: 'ORD-1011', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Less salt" }],
@@ -90,7 +90,8 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'ORD-1013', tableNumber: 12, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Make it quick!" }],
-    status: 'preparing', timestamp: new Date(Date.now() - 60000 * 5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // Made 'paid' and recent
+    type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
 ];
 
@@ -128,7 +129,7 @@ export default function AdminPage() {
   const [billRequests, setBillRequests] = useState<Order[]>([]);
   
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    return items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
   }, []);
 
   const formatPeriodLabel = useCallback((period: AnalyticsPeriod, start?: Date, end?: Date): string => {
@@ -156,6 +157,57 @@ export default function AdminPage() {
     }
   }, []);
   
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      router.push('/login');
+    } else {
+      setCurrentUser(user);
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); 
+      getMenuItems(); 
+      setIsMounted(true);
+    }
+  }, [router]);
+
+  const loadAllOrders = useCallback(() => {
+    if(!isMounted) return;
+    const ordersFromStorage = getSharedOrders();
+    setAllOrders(ordersFromStorage);
+
+    const currentBillRequests = ordersFromStorage.filter(
+        order => order.status === 'bill_requested' && order.type === 'dine-in'
+    ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    setBillRequests(currentBillRequests);
+
+
+    const newUnseenRequests = currentBillRequests.filter(
+        order => !displayedBillRequestNotifications.has(order.id)
+    );
+
+    if (newUnseenRequests.length > 0) {
+        const newNotifications = new Set(displayedBillRequestNotifications);
+        newUnseenRequests.forEach(order => {
+            toast({
+                title: 'Bill Requested',
+                description: `Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) requests billing.`,
+                duration: 10000,
+                 variant: 'default'
+            });
+            newNotifications.add(order.id);
+        });
+        setDisplayedBillRequestNotifications(newNotifications);
+    }
+
+  }, [isMounted, toast, displayedBillRequestNotifications]);
+  
+  useEffect(() => {
+    if(isMounted){
+        loadAllOrders();
+        const intervalId = setInterval(loadAllOrders, 7000); 
+        return () => clearInterval(intervalId);
+    }
+  }, [isMounted, loadAllOrders]);
+
   const paidOrders = useMemo(() => allOrders.filter(order => order.status === 'paid'), [allOrders]);
 
   const activeOrdersList = useMemo(() => {
@@ -277,8 +329,10 @@ export default function AdminPage() {
             if (!itemSales[item.id]) {
               itemSales[item.id] = { name: item.name, quantitySold: 0, totalSales: 0, category: item.category };
             }
-            itemSales[item.id].quantitySold += item.quantity;
-            itemSales[item.id].totalSales += item.price * item.quantity;
+            const price = Number(item.price) || 0;
+            const quantity = Number(item.quantity) || 0;
+            itemSales[item.id].quantitySold += quantity;
+            itemSales[item.id].totalSales += price * quantity;
           });
         });
         return Object.values(itemSales).sort((a,b) => b.totalSales - a.totalSales);
@@ -318,56 +372,6 @@ export default function AdminPage() {
         }));
       }, [analyticsData.filteredOrders]);
 
-  const loadAllOrders = useCallback(() => {
-    if(!isMounted) return;
-    const ordersFromStorage = getSharedOrders();
-    setAllOrders(ordersFromStorage);
-
-    const currentBillRequests = ordersFromStorage.filter(
-        order => order.status === 'bill_requested' && order.type === 'dine-in'
-    ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    setBillRequests(currentBillRequests);
-
-
-    const newUnseenRequests = currentBillRequests.filter(
-        order => !displayedBillRequestNotifications.has(order.id)
-    );
-
-    if (newUnseenRequests.length > 0) {
-        const newNotifications = new Set(displayedBillRequestNotifications);
-        newUnseenRequests.forEach(order => {
-            toast({
-                title: 'Bill Requested',
-                description: `Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) requests billing.`,
-                duration: 10000,
-                 variant: 'default'
-            });
-            newNotifications.add(order.id);
-        });
-        setDisplayedBillRequestNotifications(newNotifications);
-    }
-
-  }, [isMounted, toast, displayedBillRequestNotifications]);
-
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (!user || user.role !== 'admin') {
-      router.push('/login');
-    } else {
-      setCurrentUser(user);
-      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); 
-      getMenuItems(); 
-      setIsMounted(true);
-    }
-  }, [router]);
-
-  useEffect(() => {
-    if(isMounted){
-        loadAllOrders();
-        const intervalId = setInterval(loadAllOrders, 7000); 
-        return () => clearInterval(intervalId);
-    }
-  }, [isMounted, loadAllOrders]);
 
   const handleSelectBillRequest = (order: Order) => {
     setOrderForBill(order);
@@ -908,3 +912,5 @@ export default function AdminPage() {
   );
 }
 
+
+    
