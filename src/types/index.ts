@@ -48,6 +48,6 @@ export interface User {
 export interface NewUserCredentials {
   username: string;
   password?: string; // Password is required for creation
-  role: 'waiter'; // For now, only waiter creation is supported via UI
+  role: 'waiter' | 'kitchen'; // Admin can create waiters or kitchen staff
 }
 

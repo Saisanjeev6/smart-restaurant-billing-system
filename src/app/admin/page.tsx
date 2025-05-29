@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
-import { ManageWaitersTool } from './components/ManageWaitersTool';
+import { ManageUsersTool } from './components/ManageUsersTool'; // Updated import
 import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
@@ -122,7 +122,6 @@ export default function AdminPage() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
   const [billRequests, setBillRequests] = useState<Order[]>([]);
-
 
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -263,7 +262,6 @@ export default function AdminPage() {
     return '';
   }, [orderForBill, currentBill]);
 
-
   const loadAllOrders = useCallback(() => {
     if(!isMounted) return;
     const ordersFromStorage = getSharedOrders();
@@ -330,13 +328,13 @@ export default function AdminPage() {
       totalAmount,
       paymentStatus: order.status === 'paid' ? 'paid' : 'pending',
     });
-    setDiscountPercentage(0); // Reset discount when a new bill is loaded
+    setDiscountPercentage(0); 
     toast({ title: 'Bill Loaded', description: `Bill for Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) is ready.` });
   };
 
 
   const applyDiscount = () => {
-    if (!currentBill || !orderForBill || currentBill.paymentStatus === 'paid') return; // Can't apply discount if already paid
+    if (!currentBill || !orderForBill || currentBill.paymentStatus === 'paid') return; 
     const discountValue = (currentBill.subtotal * discountPercentage) / 100;
     const newTotal = currentBill.subtotal + currentBill.taxAmount - discountValue;
     setCurrentBill({ ...currentBill, discountAmount: discountValue, totalAmount: newTotal });
@@ -352,7 +350,6 @@ export default function AdminPage() {
     let paymentFinalized = orderForBill.status === 'paid';
 
     if (orderForBill.status === 'bill_requested') {
-      // Apply discount before marking as paid if one is set
       const currentDiscount = (currentBill.subtotal * discountPercentage) / 100;
       const finalTotal = currentBill.subtotal + currentBill.taxAmount - currentDiscount;
       
@@ -374,18 +371,13 @@ export default function AdminPage() {
 
     if (paymentFinalized) {
         window.print();
-        // Clear the bill card after printing and processing a 'bill_requested' order
-        // Or after re-printing a 'paid' order to ensure admin selects a new request
         setTimeout(() => {
             setOrderForBill(null);
             setCurrentBill(null);
             setDiscountPercentage(0);
-            loadAllOrders(); // Explicitly refresh the list of requests
+            loadAllOrders(); 
         }, 100);
     } else if (orderForBill.status !== 'bill_requested') { 
-        // This case is for printing a bill that was not in 'bill_requested' state,
-        // e.g., admin manually loaded an older 'paid' order (if UI allowed)
-        // or a 'pending' order for review (though current UI focuses on 'bill_requested')
         toast({ title: 'Printing Bill', description: 'Printing current bill details.' });
         window.print();
     }
@@ -399,7 +391,7 @@ export default function AdminPage() {
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
-      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300'; // 'billed' might be a transient state before 'paid'
+      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300'; 
       case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
@@ -430,7 +422,7 @@ export default function AdminPage() {
             <TabsTrigger value="orders" className="flex items-center gap-2"><ListChecks /> Active Orders</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText /> Bill Management</TabsTrigger>
             <TabsTrigger value="tips" className="flex items-center gap-2"><Sparkles /> AI Tip Suggester</TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Waiters</TabsTrigger>
+            <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Users</TabsTrigger> {/* Updated tab name */}
             <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart /> Sales Analytics</TabsTrigger>
           </TabsList>
 
@@ -590,7 +582,7 @@ export default function AdminPage() {
             <TipSuggestionTool initialOrderDetails={orderDetailsForTipTool} />
           </TabsContent>
           <TabsContent value="users">
-            <ManageWaitersTool />
+            <ManageUsersTool /> {/* Updated component */}
           </TabsContent>
           <TabsContent value="analytics">
             <Card className="shadow-lg">

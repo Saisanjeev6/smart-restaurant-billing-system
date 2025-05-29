@@ -5,7 +5,7 @@
 
 'use client'; // This module interacts with localStorage, so it's client-side.
 
-import type { User, NewUserCredentials, UserRole } from '@/types'; // Assuming User type will be expanded
+import type { User, NewUserCredentials, UserRole } from '@/types'; 
 
 const USERS_KEY = 'restaurant_users_v3'; 
 const CURRENT_USER_KEY = 'restaurant_current_user_v3';
@@ -25,11 +25,10 @@ const initializeUsers = () => {
   if (!users.find(u => u.username === 'kitchen')) {
     users.push({ username: 'kitchen', password: 'kitchen', role: 'kitchen', id: 'user-kitchen-01' });
   }
-  if (!users.find(u => u.username === 'waiter1')) { // Default waiter for testing
+  if (!users.find(u => u.username === 'waiter1')) { 
     users.push({ username: 'waiter1', password: 'password', role: 'waiter', id: 'user-waiter-default-001' });
   }
 
-  // Ensure existing users are preserved, only add if missing.
   const uniqueUsersMap = new Map<string, User>();
   users.forEach(user => {
     if (!uniqueUsersMap.has(user.username)) {
@@ -41,7 +40,6 @@ const initializeUsers = () => {
   localStorage.setItem(USERS_KEY, JSON.stringify(uniqueUsers));
 };
 
-// Initialize on module load (client-side only)
 if (typeof window !== 'undefined') {
   initializeUsers();
 }
@@ -73,10 +71,7 @@ export const getCurrentUser = (): User | null => {
 
 export const createUser = (newUser: NewUserCredentials): { success: boolean; message: string; users?: User[] } => {
   if (typeof window === 'undefined') return { success: false, message: 'localStorage not available' };
-  if (newUser.role !== 'waiter') { 
-    return { success: false, message: 'Can only create waiter accounts through this interface.' };
-  }
-
+  
   const users = getStoredUsers();
   if (users.find(u => u.username === newUser.username)) {
     return { success: false, message: 'Username already exists.' };
@@ -88,14 +83,16 @@ export const createUser = (newUser: NewUserCredentials): { success: boolean; mes
   };
   users.push(userWithId);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  return { success: true, message: `${newUser.role} created successfully.`, users: users.filter(u => u.role === 'waiter') };
+  // Return all non-admin users after creation
+  return { success: true, message: `${newUser.role} account created successfully.`, users: getUsers() };
 };
 
-export const getUsers = (role?: 'waiter'): User[] => {
+export const getUsers = (role?: UserRole): User[] => {
   if (typeof window === 'undefined') return [];
   const users = getStoredUsers();
   if (role) {
     return users.filter(u => u.role === role);
   }
-  return users.filter(u => u.role === 'waiter'); // By default, only show waiters
+  // By default, return waiter and kitchen users for management
+  return users.filter(u => u.role === 'waiter' || u.role === 'kitchen');
 };
