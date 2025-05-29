@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getMenuItems } from '@/lib/menuManager';
-import { getTableNumbersArray, getTaxRate } from '@/lib/restaurantSettings'; // Import getTaxRate
+import { getTableNumbersArray, getTaxRate } from '@/lib/restaurantSettings';
 import type { MenuItem as MenuItemType, Order, OrderItem, User, OrderStatus } from '@/types';
 import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon, CookingPot, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
@@ -53,27 +53,28 @@ export default function WaiterPage() {
   const [displayedReadyNotifications, setDisplayedReadyNotifications] = useState<Set<string>>(new Set());
   const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
   const [tableNumbers, setTableNumbers] = useState<number[]>([]);
-  const [taxRate, setTaxRate] = useState(0.08); // For displaying in confirmation
+  const [taxRate, setTaxRate] = useState(0.08);
 
   const calculateSubtotal = useCallback((items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, []);
 
-  const displayedSessionOrders = useMemo(() => {
-    if (selectedTable && pendingOrderForSelectedTable) {
-      return [pendingOrderForSelectedTable];
-    }
-    return activeOrders.filter(order => order.status === 'pending');
-  }, [selectedTable, activeOrders, pendingOrderForSelectedTable]);
-  
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
-    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'billed');
+    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'bill_requested' && o.status !== 'billed');
   }, [selectedTable, activeOrders, isMounted]);
 
+  const displayedSessionOrders = useMemo(() => {
+    if (selectedTable && pendingOrderForSelectedTable) {
+      return [pendingOrderForSelectedTable]; 
+    }
+    // For the "All Active Dine-in Orders" tab, we show all orders not yet paid/billed/cancelled
+    return activeOrders.filter(order => order.type === 'dine-in' && order.status !== 'paid' && order.status !== 'cancelled' && order.status !== 'billed');
+  }, [selectedTable, activeOrders, pendingOrderForSelectedTable]);
+  
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
-  const taxForBillDialog = subtotalForBillDialog * taxRate; // Use state taxRate
+  const taxForBillDialog = subtotalForBillDialog * taxRate;
   const totalForBillDialog = subtotalForBillDialog + taxForBillDialog;
 
 
@@ -98,7 +99,7 @@ export default function WaiterPage() {
       setCurrentUser(user);
       setMenuOptions(getMenuItems());
       setTableNumbers(getTableNumbersArray());
-      setTaxRate(getTaxRate()); // Load tax rate
+      setTaxRate(getTaxRate());
     }
   }, [router]);
 
@@ -107,7 +108,7 @@ export default function WaiterPage() {
     const orders = getSharedOrders();
     setActiveOrders(orders); 
     setTableNumbers(getTableNumbersArray()); 
-    setTaxRate(getTaxRate()); // Refresh tax rate
+    setTaxRate(getTaxRate());
 
     if(currentUser) {
       const readyOrdersForThisWaiter = orders.filter(
@@ -225,7 +226,7 @@ export default function WaiterPage() {
       orderToUpdate.timestamp = new Date().toISOString();
       if (orderToUpdate.status === 'ready' || orderToUpdate.status === 'served' || orderToUpdate.status === 'bill_requested') {
          orderToUpdate.status = 'pending'; 
-      } else if (!orderToUpdate.status) {
+      } else if (!orderToUpdate.status || orderToUpdate.status === 'billed' || orderToUpdate.status === 'paid') { // if it was previously billed/paid and new items added
          orderToUpdate.status = 'pending';
       }
       
@@ -251,15 +252,17 @@ export default function WaiterPage() {
   };
 
   const handleRequestBillForSelectedTable = () => {
-    if (!pendingOrderForSelectedTable) {
-      toast({ title: 'Error', description: `No active order found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
+    const orderToBill = activeOrders.find(o => o.tableNumber === parseInt(selectedTable) && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'billed' && o.status !== 'cancelled');
+
+    if (!orderToBill || orderToBill.items.length === 0) {
+      toast({ title: 'Error', description: `No active order with items found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
       return;
     }
-    if (pendingOrderForSelectedTable.status === 'bill_requested' || pendingOrderForSelectedTable.status === 'billed' || pendingOrderForSelectedTable.status === 'paid') {
-        toast({ title: 'Info', description: `Bill already requested or processed for Table ${selectedTable}.`, variant: 'default' });
+    if (orderToBill.status === 'bill_requested') {
+        toast({ title: 'Info', description: `Bill already requested for Table ${selectedTable}.`, variant: 'default' });
         return;
     }
-    setOrderForBillConfirmation(pendingOrderForSelectedTable);
+    setOrderForBillConfirmation(orderToBill);
     setIsBillConfirmOpen(true);
   };
 
@@ -340,10 +343,10 @@ export default function WaiterPage() {
   }
 
   const canSubmitCurrentSelection = selectedTable && currentOrderItems.length > 0;
-  const canRequestBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 &&
-                                         (pendingOrderForSelectedTable.status !== 'bill_requested' &&
-                                          pendingOrderForSelectedTable.status !== 'billed' &&
-                                          pendingOrderForSelectedTable.status !== 'paid');
+  
+  const orderForSelectedTableCard = activeOrders.find(o => o.tableNumber === parseInt(selectedTable) && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'billed');
+  
+  const canRequestBillForSelectedTable = !!orderForSelectedTableCard && orderForSelectedTableCard.items.length > 0 && orderForSelectedTableCard.status !== 'bill_requested';
 
 
   return (
@@ -488,25 +491,25 @@ export default function WaiterPage() {
                     <CardHeader>
                       <CardTitle className="text-xl flex items-center justify-between">
                         Active Order for Table {selectedTable}
-                        {pendingOrderForSelectedTable?.status && (
-                          <Badge variant="outline" className={`${getStatusBadgeClass(pendingOrderForSelectedTable.status)} capitalize font-medium`}>
-                            {pendingOrderForSelectedTable.status === 'preparing' && <CookingPot className="w-3 h-3 mr-1" />}
-                            {pendingOrderForSelectedTable.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
-                            {pendingOrderForSelectedTable.status.replace('_', ' ')}
+                        {orderForSelectedTableCard?.status && (
+                          <Badge variant="outline" className={`${getStatusBadgeClass(orderForSelectedTableCard.status)} capitalize font-medium`}>
+                            {orderForSelectedTableCard.status === 'preparing' && <CookingPot className="w-3 h-3 mr-1" />}
+                            {orderForSelectedTableCard.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
+                            {orderForSelectedTableCard.status.replace('_', ' ')}
                           </Badge>
                         )}
                       </CardTitle>
-                      {pendingOrderForSelectedTable &&
+                      {orderForSelectedTableCard &&
                           <CardDescription>
-                              Total subtotal: ₹{calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}
+                              Total subtotal: ₹{calculateSubtotal(orderForSelectedTableCard.items).toFixed(2)}
                           </CardDescription>
                       }
-                      {!pendingOrderForSelectedTable && <CardDescription>No items submitted for this table yet.</CardDescription>}
+                      {!orderForSelectedTableCard && <CardDescription>No items submitted for this table yet.</CardDescription>}
                     </CardHeader>
                     <CardContent>
-                      {pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 ? (
+                      {orderForSelectedTableCard && orderForSelectedTableCard.items.length > 0 ? (
                         <ul className="space-y-2 max-h-60 overflow-y-auto">
-                          {pendingOrderForSelectedTable.items.map((item, index) => (
+                          {orderForSelectedTableCard.items.map((item, index) => (
                             <li key={`${item.id}-${item.comment || 'no-comment'}-${index}`} className="p-2 rounded-md bg-muted/30">
                               <div className="flex justify-between items-center">
                                   <span>{item.name} (x{item.quantity})</span>
@@ -524,14 +527,14 @@ export default function WaiterPage() {
                         <p className="text-muted-foreground text-center py-4">No items submitted to kitchen for Table {selectedTable} yet.</p>
                       )}
                     </CardContent>
-                    {pendingOrderForSelectedTable && canRequestBillForSelectedTable && (
+                    {orderForSelectedTableCard && canRequestBillForSelectedTable && (
                       <CardFooter>
                         <Button onClick={handleRequestBillForSelectedTable} className="w-full" variant="outline">
                             <ReceiptText className="mr-2" /> Request Bill for Table {selectedTable}
                           </Button>
                       </CardFooter>
                     )}
-                     {pendingOrderForSelectedTable && pendingOrderForSelectedTable.status === 'bill_requested' && (
+                     {orderForSelectedTableCard && orderForSelectedTableCard.status === 'bill_requested' && (
                         <CardFooter>
                             <p className="w-full text-center text-sm text-orange-600 font-semibold">Bill has been requested for this table.</p>
                         </CardFooter>
@@ -642,3 +645,4 @@ export default function WaiterPage() {
     </div>
   );
 }
+
