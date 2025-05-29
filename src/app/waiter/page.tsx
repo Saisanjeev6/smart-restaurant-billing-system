@@ -12,8 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { TABLE_NUMBERS } from '@/lib/constants';
 import { getMenuItems } from '@/lib/menuManager';
+import { getTableNumbersArray } from '@/lib/restaurantSettings'; // Import new function
 import type { MenuItem as MenuItemType, Order, OrderItem, User, OrderStatus } from '@/types';
 import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon } from 'lucide-react';
 import Image from 'next/image';
@@ -50,6 +50,7 @@ export default function WaiterPage() {
   const [isMounted, setIsMounted] = useState(false);
   const [displayedReadyNotifications, setDisplayedReadyNotifications] = useState<Set<string>>(new Set());
   const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
+  const [tableNumbers, setTableNumbers] = useState<number[]>([]); // State for table numbers
 
   useEffect(() => {
     setIsMounted(true);
@@ -59,6 +60,7 @@ export default function WaiterPage() {
     } else {
       setCurrentUser(user);
       setMenuOptions(getMenuItems());
+      setTableNumbers(getTableNumbersArray()); // Get table numbers from settings
     }
   }, [router]);
 
@@ -70,6 +72,7 @@ export default function WaiterPage() {
     if (!isMounted) return;
     const orders = getSharedOrders();
     setActiveOrders(orders);
+    setTableNumbers(getTableNumbersArray()); // Refresh table numbers in case they changed
 
     if(currentUser) {
       const readyOrdersForThisWaiter = orders.filter(
@@ -103,7 +106,7 @@ export default function WaiterPage() {
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
-    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled');
+    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
   }, [selectedTable, activeOrders, isMounted]);
   
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
@@ -111,14 +114,14 @@ export default function WaiterPage() {
   const allUnbilledDineInOrdersList = useMemo(() => {
     if (!isMounted) return [];
     return activeOrders
-      .filter(order => order.type === 'dine-in' && order.status !== 'paid' && order.status !== 'cancelled')
+      .filter(order => order.type === 'dine-in' && order.status !== 'paid' && order.status !== 'cancelled' && order.status !== 'billed')
       .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
   }, [activeOrders, isMounted]);
 
 
   const handleSelectTable = (tableNum: number) => {
     setSelectedTable(String(tableNum));
-    setCurrentOrderItems([]); // Clear previous selection when changing tables
+    setCurrentOrderItems([]); 
   };
 
   const handleAddItemToOrder = () => {
@@ -164,7 +167,7 @@ export default function WaiterPage() {
     const tableNum = parseInt(selectedTable);
     let orderToUpdate: Order;
 
-    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled');
+    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
 
     if (existingOrder) {
       orderToUpdate = { ...existingOrder };
@@ -182,12 +185,8 @@ export default function WaiterPage() {
       });
       orderToUpdate.items = Array.from(updatedItemsMap.values());
       orderToUpdate.timestamp = new Date().toISOString();
-      // Keep current status unless it was 'billed' or 'paid', then reset to 'pending' or 'served' or 'ready' as appropriate
-      if (orderToUpdate.status === 'billed' || orderToUpdate.status === 'paid') {
-        orderToUpdate.status = 'pending';
-      } else if (orderToUpdate.status !== 'pending' && orderToUpdate.status !== 'preparing' && orderToUpdate.status !== 'ready' && orderToUpdate.status !== 'served' && orderToUpdate.status !== 'bill_requested') {
-         orderToUpdate.status = 'pending'; // Default back to pending if items added to a non-active state
-      }
+      orderToUpdate.status = 'pending'; // Always set to pending when adding new items to kitchen
+      
 
       toast({ title: 'Order Updated', description: `Items added/updated for Table ${selectedTable}. Sent to kitchen.` });
     } else { 
@@ -214,6 +213,10 @@ export default function WaiterPage() {
       toast({ title: 'Error', description: `No active order found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
       return;
     }
+    if (pendingOrderForSelectedTable.status === 'bill_requested') {
+        toast({ title: 'Info', description: `Bill already requested for Table ${selectedTable}. Admin is processing.`, variant: 'default' });
+        return;
+    }
     setOrderForBillConfirmation(pendingOrderForSelectedTable);
     setIsBillConfirmOpen(true);
   };
@@ -237,7 +240,6 @@ export default function WaiterPage() {
     setCurrentOrderItems([]); 
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
-    // setSelectedTable(''); // Optionally clear selected table after bill request
   };
 
   const getStatusBadgeClass = (status: OrderStatus): string => {
@@ -247,7 +249,7 @@ export default function WaiterPage() {
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
-      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400'; // More distinct for billed
+      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400'; 
       case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
@@ -255,27 +257,27 @@ export default function WaiterPage() {
 
   const getTableDisplayStatus = (tableNum: number): TableDisplayStatus => {
     if (String(tableNum) === selectedTable) return 'selected';
-    const order = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'cancelled');
-    if (!order || order.status === 'billed' || order.status === 'paid') return 'vacant';
+    const order = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'cancelled' && o.status !== 'paid' && o.status !== 'billed');
+    if (!order) return 'vacant';
     if (order.status === 'bill_requested') return 'occupied_bill_requested';
     if (order.status === 'ready' || order.status === 'served') return 'occupied_ready';
-    return 'occupied_pending'; // Covers 'pending', 'preparing'
+    return 'occupied_pending'; 
   };
 
   const getTableStatusStyle = (status: TableDisplayStatus): string => {
     switch (status) {
-      case 'vacant': return 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-300';
+      case 'vacant': return 'bg-card hover:bg-muted/50 text-card-foreground border-border';
       case 'selected': return 'bg-primary text-primary-foreground border-primary ring-2 ring-primary ring-offset-2';
       case 'occupied_pending': return 'bg-blue-100 hover:bg-blue-200 text-blue-700 border-blue-400';
       case 'occupied_ready': return 'bg-green-100 hover:bg-green-200 text-green-700 border-green-400 animate-pulse';
       case 'occupied_bill_requested': return 'bg-orange-100 hover:bg-orange-200 text-orange-700 border-orange-400';
-      default: return 'bg-white hover:bg-gray-50 border-gray-300';
+      default: return 'bg-card hover:bg-muted/50 border-border';
     }
   };
 
   const getTableStatusIcon = (status: TableDisplayStatus) => {
     switch (status) {
-        case 'vacant': return <Coffee className="w-4 h-4 text-gray-400" />;
+        case 'vacant': return <Coffee className="w-4 h-4 text-muted-foreground" />;
         case 'occupied_pending': return <Utensils className="w-4 h-4 text-blue-600" />;
         case 'occupied_ready': return <BellRing className="w-4 h-4 text-green-600" />;
         case 'occupied_bill_requested': return <FileTextIcon className="w-4 h-4 text-orange-600" />;
@@ -303,37 +305,41 @@ export default function WaiterPage() {
     <div className="flex flex-col min-h-screen">
       <AppHeader title="Waiter Interface" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
-        <Tabs defaultValue="orderManagement" className="w-full">
+        <Tabs defaultValue="tableManagement" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="orderManagement" className="flex items-center gap-2"><LayoutGrid /> Table Management</TabsTrigger>
-            <TabsTrigger value="allActiveOrders" className="flex items-center gap-2"><ListOrdered /> All Active Orders</TabsTrigger>
+            <TabsTrigger value="tableManagement" className="flex items-center gap-2"><LayoutGrid /> Table Management</TabsTrigger>
+            <TabsTrigger value="allActiveOrders" className="flex items-center gap-2"><ListOrdered /> All Active Dine-in Orders</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="orderManagement">
+          <TabsContent value="tableManagement">
             <Card className="mb-6 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-xl">Select a Table</CardTitle>
-                <CardDescription>Click on a table below to manage its order.</CardDescription>
+                <CardDescription>Click on a table below to manage its order. Table count is ({tableNumbers.length}).</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3 p-2">
-                  {TABLE_NUMBERS.map(num => {
-                    const status = getTableDisplayStatus(num);
-                    return (
-                      <Button
-                        key={num}
-                        variant="outline"
-                        className={`flex flex-col items-center justify-center h-20 aspect-square shadow-sm transition-all duration-150 ease-in-out transform hover:scale-105 ${getTableStatusStyle(status)}`}
-                        onClick={() => handleSelectTable(num)}
-                      >
-                        <span className="text-lg font-bold">{num}</span>
-                        <div className="mt-1">
-                           {getTableStatusIcon(status)}
-                        </div>
-                      </Button>
-                    );
-                  })}
-                </div>
+                {tableNumbers.length > 0 ? (
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3 p-2">
+                    {tableNumbers.map(num => {
+                      const status = getTableDisplayStatus(num);
+                      return (
+                        <Button
+                          key={num}
+                          variant="outline"
+                          className={`flex flex-col items-center justify-center h-20 aspect-square shadow-sm transition-all duration-150 ease-in-out transform hover:scale-105 ${getTableStatusStyle(status)}`}
+                          onClick={() => handleSelectTable(num)}
+                        >
+                          <span className="text-lg font-bold">{num}</span>
+                          <div className="mt-1">
+                            {getTableStatusIcon(status)}
+                          </div>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-center py-4">No tables configured. Admin needs to set the number of tables in settings.</p>
+                )}
               </CardContent>
             </Card>
 
@@ -450,11 +456,16 @@ export default function WaiterPage() {
                           </Button>
                       </CardFooter>
                     )}
+                     {pendingOrderForSelectedTable && pendingOrderForSelectedTable.status === 'bill_requested' && (
+                        <CardFooter>
+                            <p className="w-full text-center text-sm text-orange-600 font-semibold">Bill has been requested for this table.</p>
+                        </CardFooter>
+                    )}
                   </Card>
                 </div>
               </div>
             )}
-            {!selectedTable && (
+            {!selectedTable && tableNumbers.length > 0 && (
                  <Card className="shadow-lg">
                     <CardContent className="text-center py-12">
                          <Image src="https://placehold.co/400x250.png" alt="Restaurant tables illustration" width={200} height={125} className="mx-auto mb-4 rounded-lg opacity-70" data-ai-hint="restaurant tables" />
@@ -545,4 +556,3 @@ export default function WaiterPage() {
     </div>
   );
 }
-

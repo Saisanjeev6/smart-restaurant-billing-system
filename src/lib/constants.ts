@@ -16,7 +16,6 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
   { id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course' },
 ];
 
-export const TABLE_NUMBERS: number[] = Array.from({ length: 20 }, (_, i) => i + 1);
+// TABLE_NUMBERS is removed from here as it's now dynamic via restaurantSettings.ts
 
 export const TAX_RATE = 0.08; // 8% sales tax (can be adjusted as needed)
-

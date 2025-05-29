@@ -16,11 +16,12 @@ import { TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageUsersTool } from './components/ManageUsersTool';
-import { ManageMenuTool } from './components/ManageMenuTool'; // New import
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus } from 'lucide-react';
+import { ManageMenuTool } from './components/ManageMenuTool';
+import { RestaurantSettingsTool } from './components/RestaurantSettingsTool'; // New import
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus, SettingsIcon } from 'lucide-react'; // Added SettingsIcon
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
-import { getMenuItems } from '@/lib/menuManager'; // Import getMenuItems
+import { getMenuItems } from '@/lib/menuManager';
 import { getSharedOrders, initializeSharedOrdersWithMockData, updateSharedOrderStatus } from '@/lib/orderManager';
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
@@ -30,8 +31,6 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { Badge } from '@/components/ui/badge';
 
-// MOCK_ORDERS_SEED needs to be updated with actual menu items or IDs that exist after dynamic menu
-// For now, let's assume it uses IDs from INITIAL_MENU_ITEMS
 const MOCK_ORDERS_SEED: Order[] = [
   {
     id: 'ORD-1001', tableNumber: 3, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
@@ -57,6 +56,39 @@ const MOCK_ORDERS_SEED: Order[] = [
     id: 'ORD-1006', tableNumber: 4, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
     status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
+  // Additional mock orders for better analytics data
+  {
+    id: 'ORD-1007', tableNumber: 7, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
+    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
+   {
+    id: 'ORD-1008', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }, { id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
+    tableNumber: 10, status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 2)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
+  {
+    id: 'ORD-1009', tableNumber: 2, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 1 }],
+    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
+   {
+    id: 'ORD-1010', tableNumber: 6, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 2 }],
+    status: 'paid', timestamp: new Date().toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
+  {
+    id: 'ORD-1011', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1 }],
+    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
+  {
+    id: 'TAKE-004', items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
+    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 4)).toISOString(), type: 'takeaway'
+  },
+   {
+    id: 'TAKE-005', items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
+    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 5)).setDate(5)).toISOString(), type: 'takeaway'
+  },
+  {
+    id: 'ORD-1012', tableNumber: 11, items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 1 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
+    status: 'bill_requested', timestamp: new Date(Date.now() - 120000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  }
 ];
 
 type AnalyticsPeriod = 'today' | 'week' | 'month' | '2months' | 'custom';
@@ -84,7 +116,7 @@ export default function AdminPage() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
   const [billRequests, setBillRequests] = useState<Order[]>([]);
-
+  
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   }, []);
@@ -262,8 +294,8 @@ export default function AdminPage() {
       router.push('/login');
     } else {
       setCurrentUser(user);
-      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); // Initialize if localstorage is empty
-      getMenuItems(); // Ensure menu items are initialized
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); 
+      getMenuItems(); 
       setIsMounted(true);
     }
   }, [router]);
@@ -340,8 +372,8 @@ export default function AdminPage() {
             setDiscountPercentage(0);
             loadAllOrders(); 
         }, 100);
-    } else if (orderForBill.status !== 'bill_requested') { 
-        toast({ title: 'Printing Bill', description: 'Printing current bill details.' });
+    } else if (orderForBill.status !== 'bill_requested' && orderForBill.status === 'paid') { 
+        toast({ title: 'Printing Bill (Reprint)', description: 'Printing current bill details.' });
         window.print();
     }
   };
@@ -381,12 +413,13 @@ export default function AdminPage() {
       <AppHeader title="Admin Dashboard" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-6"> {/* Updated grid-cols */}
+          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-7"> {/* Updated grid-cols */}
             <TabsTrigger value="orders" className="flex items-center gap-2"><ListChecks /> Active Orders</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText /> Bill Management</TabsTrigger>
             <TabsTrigger value="tips" className="flex items-center gap-2"><Sparkles /> AI Tip Suggester</TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Users</TabsTrigger>
-            <TabsTrigger value="menu" className="flex items-center gap-2"><ListPlus /> Manage Menu</TabsTrigger> {/* New Tab */}
+            <TabsTrigger value="menu" className="flex items-center gap-2"><ListPlus /> Manage Menu</TabsTrigger>
+            <TabsTrigger value="settings" className="flex items-center gap-2"><SettingsIcon /> Restaurant Settings</TabsTrigger> {/* New Tab */}
             <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart /> Sales Analytics</TabsTrigger>
           </TabsList>
 
@@ -548,8 +581,11 @@ export default function AdminPage() {
           <TabsContent value="users">
             <ManageUsersTool />
           </TabsContent>
-          <TabsContent value="menu"> {/* New Tab Content */}
+          <TabsContent value="menu">
             <ManageMenuTool />
+          </TabsContent>
+          <TabsContent value="settings"> {/* New Tab Content */}
+            <RestaurantSettingsTool />
           </TabsContent>
           <TabsContent value="analytics">
             <Card className="shadow-lg">

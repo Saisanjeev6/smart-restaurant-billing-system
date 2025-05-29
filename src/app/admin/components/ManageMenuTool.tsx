@@ -98,7 +98,6 @@ export function ManageMenuTool() {
     setItemName(item.name);
     setItemPrice(String(item.price));
     setItemCategory(item.category);
-    // Scroll to top or to the form for better UX
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -194,7 +193,7 @@ export function ManageMenuTool() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl"><Utensils className="text-primary" /> Current Menu Items</CardTitle>
-          <CardDescription>List of all items available on the menu, grouped by category.</CardDescription>
+          <CardDescription>List of all items available on the menu, grouped by category. Currency is INR (₹).</CardDescription>
         </CardHeader>
         <CardContent className="max-h-[400px] overflow-y-auto">
           {menuItems.length === 0 ? (
@@ -204,13 +203,13 @@ export function ManageMenuTool() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Price (₹)</TableHead>
+                  <TableHead>Price</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {Object.entries(groupedMenuItems)
-                  .sort(([categoryA], [categoryB]) => categoryA.localeCompare(categoryB)) // Sort categories alphabetically
+                  .sort(([categoryA], [categoryB]) => categoryA.localeCompare(categoryB)) 
                   .map(([category, itemsInCategory]) => (
                   <React.Fragment key={category}>
                     <TableRow className="bg-muted/30 hover:bg-muted/40">
