@@ -76,6 +76,9 @@ export const createUser = (newUser: NewUserCredentials): { success: boolean; mes
   if (users.find(u => u.username === newUser.username)) {
     return { success: false, message: 'Username already exists.' };
   }
+  if (!newUser.password || !newUser.password.trim()){
+     return { success: false, message: 'Password cannot be empty.' };
+  }
 
   const userWithId: User = { 
     ...newUser, 
@@ -83,7 +86,6 @@ export const createUser = (newUser: NewUserCredentials): { success: boolean; mes
   };
   users.push(userWithId);
   localStorage.setItem(USERS_KEY, JSON.stringify(users));
-  // Return all non-admin users after creation
   return { success: true, message: `${newUser.role} account created successfully.`, users: getUsers() };
 };
 
@@ -93,6 +95,47 @@ export const getUsers = (role?: UserRole): User[] => {
   if (role) {
     return users.filter(u => u.role === role);
   }
-  // By default, return waiter and kitchen users for management
   return users.filter(u => u.role === 'waiter' || u.role === 'kitchen');
+};
+
+export const updateUserPassword = (userId: string, newPassword: string): { success: boolean; message: string; users?: User[] } => {
+  if (typeof window === 'undefined') return { success: false, message: 'localStorage not available' };
+  if (!newPassword.trim()) {
+    return { success: false, message: 'New password cannot be empty.' };
+  }
+
+  let allUsers = getStoredUsers(); // Get all users, including admin, for modification
+  const userIndex = allUsers.findIndex(u => u.id === userId);
+
+  if (userIndex === -1) {
+    return { success: false, message: 'User not found.' };
+  }
+  
+  // Prevent changing admin password via this UI as a safety, though admin isn't listed.
+  if (allUsers[userIndex].role === 'admin') {
+    return { success: false, message: 'Admin password cannot be changed through this interface.' };
+  }
+
+  allUsers[userIndex].password = newPassword;
+  localStorage.setItem(USERS_KEY, JSON.stringify(allUsers));
+  return { success: true, message: `Password for ${allUsers[userIndex].username} updated.`, users: getUsers() }; // getUsers() filters to non-admin for UI refresh
+};
+
+export const deleteUser = (userId: string): { success: boolean; message: string; users?: User[] } => {
+  if (typeof window === 'undefined') return { success: false, message: 'localStorage not available' };
+
+  let allUsers = getStoredUsers();
+  const userToDelete = allUsers.find(u => u.id === userId);
+
+  if (!userToDelete) {
+    return { success: false, message: 'User not found.' };
+  }
+
+  if (userToDelete.role === 'admin') {
+    return { success: false, message: 'Admin account cannot be deleted.' };
+  }
+
+  allUsers = allUsers.filter(u => u.id !== userId);
+  localStorage.setItem(USERS_KEY, JSON.stringify(allUsers));
+  return { success: true, message: `User ${userToDelete.username} deleted.`, users: getUsers() };
 };
