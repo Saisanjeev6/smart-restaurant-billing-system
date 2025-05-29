@@ -31,14 +31,27 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { Badge } from '@/components/ui/badge';
 
+// Carefully curated MOCK_ORDERS_SEED to debug analytics for Mushroom Risotto
+// Ensure prices here are accurate. If localStorage ('restaurant_shared_orders_v1') has old data,
+// it might override this seed. Clear localStorage to re-seed from this.
 const MOCK_ORDERS_SEED: Order[] = [
+  {
+    id: 'ORD-MR-001', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Less salt" }],
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 3).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
+  },
+  {
+    id: 'ORD-MR-002', tableNumber: 12, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Make it quick!" }],
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
+    type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
+  // Other orders for context and testing other analytics features
   {
     id: 'ORD-1001', tableNumber: 3, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1, comment: "Well done" }],
     status: 'paid', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
     id: 'ORD-1002', tableNumber: 5, items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }, { id: '6', name: 'New York Cheesecake', price: 300, category: 'Dessert', quantity: 2 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' 
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
   },
   {
     id: 'TAKE-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1, comment: "Extra cheese" }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
@@ -48,7 +61,7 @@ const MOCK_ORDERS_SEED: Order[] = [
     id: 'ORD-1004', tableNumber: 1, items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }],
     status: 'ready', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
-  {
+   {
     id: 'TAKE-002', items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }],
     status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway'
   },
@@ -58,11 +71,11 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'ORD-1007', tableNumber: 7, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 3).setHours(14)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' 
+    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 3).setHours(14)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
    {
     id: 'ORD-1008', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }, { id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
-    tableNumber: 10, status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 10).setHours(19)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' 
+    tableNumber: 10, status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 10).setHours(19)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
   },
   {
     id: 'ORD-1009', tableNumber: 2, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 1 }],
@@ -70,11 +83,7 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
    {
     id: 'ORD-1010', tableNumber: 6, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 2 }],
-    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 0.2).setHours(20)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' 
-  },
-  {
-    id: 'ORD-1011', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Less salt" }],
-    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
+    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 0.2).setHours(20)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
     id: 'TAKE-004', items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
@@ -88,12 +97,8 @@ const MOCK_ORDERS_SEED: Order[] = [
     id: 'ORD-1012', tableNumber: 11, items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 1 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
     status: 'bill_requested', timestamp: new Date(Date.now() - 120000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
-  {
-    id: 'ORD-1013', tableNumber: 12, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Make it quick!" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // Made 'paid' and recent
-    type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
 ];
+
 
 type AnalyticsPeriod = 'today' | 'week' | 'month' | '2months' | 'custom';
 
@@ -127,7 +132,7 @@ export default function AdminPage() {
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(undefined);
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
   const [billRequests, setBillRequests] = useState<Order[]>([]);
-  
+
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
   }, []);
@@ -156,57 +161,6 @@ export default function AdminPage() {
       default: return '';
     }
   }, []);
-  
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (!user || user.role !== 'admin') {
-      router.push('/login');
-    } else {
-      setCurrentUser(user);
-      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); 
-      getMenuItems(); 
-      setIsMounted(true);
-    }
-  }, [router]);
-
-  const loadAllOrders = useCallback(() => {
-    if(!isMounted) return;
-    const ordersFromStorage = getSharedOrders();
-    setAllOrders(ordersFromStorage);
-
-    const currentBillRequests = ordersFromStorage.filter(
-        order => order.status === 'bill_requested' && order.type === 'dine-in'
-    ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    setBillRequests(currentBillRequests);
-
-
-    const newUnseenRequests = currentBillRequests.filter(
-        order => !displayedBillRequestNotifications.has(order.id)
-    );
-
-    if (newUnseenRequests.length > 0) {
-        const newNotifications = new Set(displayedBillRequestNotifications);
-        newUnseenRequests.forEach(order => {
-            toast({
-                title: 'Bill Requested',
-                description: `Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) requests billing.`,
-                duration: 10000,
-                 variant: 'default'
-            });
-            newNotifications.add(order.id);
-        });
-        setDisplayedBillRequestNotifications(newNotifications);
-    }
-
-  }, [isMounted, toast, displayedBillRequestNotifications]);
-  
-  useEffect(() => {
-    if(isMounted){
-        loadAllOrders();
-        const intervalId = setInterval(loadAllOrders, 7000); 
-        return () => clearInterval(intervalId);
-    }
-  }, [isMounted, loadAllOrders]);
 
   const paidOrders = useMemo(() => allOrders.filter(order => order.status === 'paid'), [allOrders]);
 
@@ -258,7 +212,7 @@ export default function AdminPage() {
       }
     } else if (selectedAnalyticsPeriod === 'custom') {
       periodLabelValue = 'Please select a start and end date for the custom range.';
-    } else if (startDate) { 
+    } else if (startDate) {
         periodLabelValue = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
          filteredOrdersForPeriod = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
@@ -298,7 +252,7 @@ export default function AdminPage() {
 
     const chartDataPoints = [];
     const now = new Date();
-    for (let i = 5; i >= 0; i--) { 
+    for (let i = 5; i >= 0; i--) {
       const targetMonthDate = subMonths(now, i);
       const monthYearStr = format(targetMonthDate, 'MMM yyyy');
       if (salesByMonth[monthYearStr]) {
@@ -319,58 +273,111 @@ export default function AdminPage() {
     return '';
   }, [orderForBill, currentBill]);
 
-    // --- New Detailed Analytics ---
-    const salesByMenuItem = useMemo(() => {
-        if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
-        const itemSales: Record<string, { name: string; quantitySold: number; totalSales: number; category: string }> = {};
-    
-        analyticsData.filteredOrders.forEach(order => {
-          order.items.forEach(item => {
-            if (!itemSales[item.id]) {
-              itemSales[item.id] = { name: item.name, quantitySold: 0, totalSales: 0, category: item.category };
-            }
-            const price = Number(item.price) || 0;
-            const quantity = Number(item.quantity) || 0;
-            itemSales[item.id].quantitySold += quantity;
-            itemSales[item.id].totalSales += price * quantity;
-          });
+  const salesByMenuItem = useMemo(() => {
+    if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
+    const itemSales: Record<string, { name: string; quantitySold: number; totalSales: number; category: string }> = {};
+
+    analyticsData.filteredOrders.forEach(order => {
+      order.items.forEach(item => {
+        if (!itemSales[item.id]) {
+          itemSales[item.id] = { name: item.name, quantitySold: 0, totalSales: 0, category: item.category };
+        }
+        const price = Number(item.price) || 0;
+        const quantity = Number(item.quantity) || 0;
+        itemSales[item.id].quantitySold += quantity;
+        itemSales[item.id].totalSales += price * quantity;
+      });
+    });
+    return Object.values(itemSales).sort((a,b) => b.totalSales - a.totalSales);
+  }, [analyticsData.filteredOrders]);
+
+  const salesByWaiter = useMemo(() => {
+    if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
+    const waiterSales: Record<string, { waiterUsername: string; ordersTaken: number; totalSales: number }> = {};
+
+    analyticsData.filteredOrders.forEach(order => {
+      if (order.type === 'dine-in' && order.waiterUsername) {
+        if (!waiterSales[order.waiterUsername]) {
+          waiterSales[order.waiterUsername] = { waiterUsername: order.waiterUsername, ordersTaken: 0, totalSales: 0 };
+        }
+        waiterSales[order.waiterUsername].ordersTaken += 1;
+        waiterSales[order.waiterUsername].totalSales += calculateOrderTotal(order.items);
+      }
+    });
+    return Object.values(waiterSales).sort((a,b) => b.totalSales - a.totalSales);
+  }, [analyticsData.filteredOrders, calculateOrderTotal]);
+
+  const peakOrderTimesData = useMemo(() => {
+    if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
+    const hourlyOrders = Array(24).fill(null).map((_, i) => ({ hour: i, orders: 0 }));
+
+    analyticsData.filteredOrders.forEach(order => {
+      const orderDate = parseISO(order.timestamp);
+      if (isValid(orderDate)) {
+        const hour = getHours(orderDate);
+        hourlyOrders[hour].orders += 1;
+      }
+    });
+
+    return hourlyOrders.map(h => ({
+      hourLabel: `${String(h.hour).padStart(2, '0')}:00`,
+      orders: h.orders,
+    }));
+  }, [analyticsData.filteredOrders]);
+
+
+  useEffect(() => {
+    const user = getCurrentUser();
+    if (!user || user.role !== 'admin') {
+      router.push('/login');
+    } else {
+      setCurrentUser(user);
+      // Initialize with MOCK_ORDERS_SEED. If localStorage has data, it will be used instead.
+      // To see changes from MOCK_ORDERS_SEED, clear 'restaurant_shared_orders_v1' in localStorage.
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
+      getMenuItems(); // Ensures menu items are loaded if not already
+      setIsMounted(true);
+    }
+  }, [router]);
+
+  const loadAllOrders = useCallback(() => {
+    if(!isMounted) return;
+    const ordersFromStorage = getSharedOrders();
+    setAllOrders(ordersFromStorage);
+
+    const currentBillRequests = ordersFromStorage.filter(
+        order => order.status === 'bill_requested' && order.type === 'dine-in'
+    ).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    setBillRequests(currentBillRequests);
+
+
+    const newUnseenRequests = currentBillRequests.filter(
+        order => !displayedBillRequestNotifications.has(order.id)
+    );
+
+    if (newUnseenRequests.length > 0) {
+        const newNotifications = new Set(displayedBillRequestNotifications);
+        newUnseenRequests.forEach(order => {
+            toast({
+                title: 'Bill Requested',
+                description: `Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) requests billing.`,
+                duration: 10000,
+                 variant: 'default'
+            });
+            newNotifications.add(order.id);
         });
-        return Object.values(itemSales).sort((a,b) => b.totalSales - a.totalSales);
-      }, [analyticsData.filteredOrders]);
-    
-      const salesByWaiter = useMemo(() => {
-        if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
-        const waiterSales: Record<string, { waiterUsername: string; ordersTaken: number; totalSales: number }> = {};
-    
-        analyticsData.filteredOrders.forEach(order => {
-          if (order.type === 'dine-in' && order.waiterUsername) {
-            if (!waiterSales[order.waiterUsername]) {
-              waiterSales[order.waiterUsername] = { waiterUsername: order.waiterUsername, ordersTaken: 0, totalSales: 0 };
-            }
-            waiterSales[order.waiterUsername].ordersTaken += 1;
-            waiterSales[order.waiterUsername].totalSales += calculateOrderTotal(order.items);
-          }
-        });
-        return Object.values(waiterSales).sort((a,b) => b.totalSales - a.totalSales);
-      }, [analyticsData.filteredOrders, calculateOrderTotal]);
-    
-      const peakOrderTimesData = useMemo(() => {
-        if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
-        const hourlyOrders = Array(24).fill(null).map((_, i) => ({ hour: i, orders: 0 }));
-    
-        analyticsData.filteredOrders.forEach(order => {
-          const orderDate = parseISO(order.timestamp);
-          if (isValid(orderDate)) {
-            const hour = getHours(orderDate);
-            hourlyOrders[hour].orders += 1;
-          }
-        });
-    
-        return hourlyOrders.map(h => ({
-          hourLabel: `${String(h.hour).padStart(2, '0')}:00`,
-          orders: h.orders,
-        }));
-      }, [analyticsData.filteredOrders]);
+        setDisplayedBillRequestNotifications(newNotifications);
+    }
+
+  }, [isMounted, toast, displayedBillRequestNotifications]);
+
+  useEffect(() => {
+    if(isMounted){
+        loadAllOrders();
+        const intervalId = setInterval(loadAllOrders, 7000);
+        return () => clearInterval(intervalId);
+    }
+  }, [isMounted, loadAllOrders]);
 
 
   const handleSelectBillRequest = (order: Order) => {
@@ -384,23 +391,23 @@ export default function AdminPage() {
       subtotal,
       taxRate: TAX_RATE,
       taxAmount,
-      discountAmount: 0, 
+      discountAmount: 0,
       totalAmount,
-      paymentStatus: order.status === 'paid' ? 'paid' : 'pending', 
+      paymentStatus: order.status === 'paid' ? 'paid' : 'pending',
     });
-    setDiscountPercentage(0); 
+    setDiscountPercentage(0);
     toast({ title: 'Bill Loaded', description: `Bill for Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) is ready.` });
   };
 
 
   const applyDiscount = () => {
-    if (!currentBill || !orderForBill || currentBill.paymentStatus === 'paid') return; 
+    if (!currentBill || !orderForBill || currentBill.paymentStatus === 'paid') return;
     const discountValue = (currentBill.subtotal * discountPercentage) / 100;
     const newTotal = currentBill.subtotal + currentBill.taxAmount - discountValue;
     setCurrentBill({ ...currentBill, discountAmount: discountValue, totalAmount: newTotal });
     toast({ title: 'Discount Applied', description: `${discountPercentage}% discount applied to the bill.` });
   };
-  
+
   const handlePrintAdminBill = () => {
     if (!currentBill || !orderForBill) {
       toast({ title: 'Error', description: 'No bill loaded to print.', variant: 'destructive' });
@@ -410,13 +417,13 @@ export default function AdminPage() {
     let paymentFinalized = orderForBill.status === 'paid';
 
     if (orderForBill.status === 'bill_requested') {
-      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100; 
+      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100;
       const finalTotal = currentBill.subtotal + currentBill.taxAmount - currentDiscount;
-      
+
       const success = updateSharedOrderStatus(orderForBill.id, 'paid');
       if (success) {
         setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid', discountAmount: currentDiscount, totalAmount: finalTotal } : null);
-        setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null); 
+        setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null);
 
         toast({
           title: 'Bill Finalized',
@@ -425,7 +432,7 @@ export default function AdminPage() {
         paymentFinalized = true;
       } else {
         toast({ title: 'Error', description: `Failed to mark order ...${orderForBill.id.slice(-6)} as paid.`, variant: 'destructive' });
-        return; 
+        return;
       }
     }
 
@@ -435,9 +442,9 @@ export default function AdminPage() {
             setOrderForBill(null);
             setCurrentBill(null);
             setDiscountPercentage(0);
-            loadAllOrders(); 
-        }, 100); 
-    } else if (orderForBill.status !== 'bill_requested' && orderForBill.status === 'paid') { 
+            loadAllOrders();
+        }, 100);
+    } else if (orderForBill.status !== 'bill_requested' && orderForBill.status === 'paid') {
         toast({ title: 'Printing Bill (Reprint)', description: 'Printing current bill details.' });
         window.print();
     }
@@ -451,7 +458,7 @@ export default function AdminPage() {
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
-      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400'; 
+      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400';
       case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
@@ -592,7 +599,7 @@ export default function AdminPage() {
                             <span>{item.name} x{item.quantity}</span>
                             {item.comment && <p className="text-xs italic text-muted-foreground ml-2 flex items-center gap-1"><MessageSquare className="w-3 h-3"/> {item.comment}</p>}
                           </div>
-                          <span>₹{(item.price * item.quantity).toFixed(2)}</span>
+                          <span>₹{(Number(item.price) * Number(item.quantity)).toFixed(2)}</span>
                         </li>
                       ))}
                     </ul>
@@ -621,16 +628,16 @@ export default function AdminPage() {
                     )}
                   </CardContent>
                   <CardFooter className="flex-col gap-2">
-                     <Button 
-                        onClick={handlePrintAdminBill} 
-                        className="w-full" 
+                     <Button
+                        onClick={handlePrintAdminBill}
+                        className="w-full"
                         variant={orderForBill.status === 'bill_requested' ? 'default' : 'outline'}
-                        size="lg" 
+                        size="lg"
                         disabled={!currentBill || (orderForBill.status !== 'bill_requested' && orderForBill.status !== 'paid')}
                       >
-                        <Printer className="mr-2 h-4 w-4" /> 
-                        {orderForBill.status === 'bill_requested' ? 'Finalize Payment & Print Bill' 
-                          : orderForBill.status === 'paid' ? 'Print Bill (Reprint)' 
+                        <Printer className="mr-2 h-4 w-4" />
+                        {orderForBill.status === 'bill_requested' ? 'Finalize Payment & Print Bill'
+                          : orderForBill.status === 'paid' ? 'Print Bill (Reprint)'
                           : 'Print Bill' }
                      </Button>
                   </CardFooter>
@@ -710,7 +717,7 @@ export default function AdminPage() {
                               selected={customStartDate}
                               onSelect={(date) => {
                                 setCustomStartDate(date);
-                                if (date && customEndDate && date > customEndDate) setCustomEndDate(undefined); 
+                                if (date && customEndDate && date > customEndDate) setCustomEndDate(undefined);
                               }}
                               initialFocus
                             />
@@ -738,7 +745,7 @@ export default function AdminPage() {
                               mode="single"
                               selected={customEndDate}
                               onSelect={setCustomEndDate}
-                              disabled={(date) => (customStartDate && date < customStartDate) || date > new Date()} 
+                              disabled={(date) => (customStartDate && date < customStartDate) || date > new Date()}
                               initialFocus
                             />
                           </PopoverContent>
@@ -809,7 +816,7 @@ export default function AdminPage() {
                     )}
                   </CardContent>
                 </Card>
-                
+
                 <Separator />
                 {/* Sales by Waiter Section */}
                 <Card className="shadow-sm">
@@ -880,7 +887,7 @@ export default function AdminPage() {
                           tickLine={false}
                           axisLine={false}
                           tickMargin={8}
-                          tickFormatter={(value) => value.slice(0, 3)} 
+                          tickFormatter={(value) => value.slice(0, 3)}
                         />
                         <YAxis
                           tickFormatter={(value) => `₹${value}`}
@@ -911,6 +918,3 @@ export default function AdminPage() {
     </div>
   );
 }
-
-
-    
