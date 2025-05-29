@@ -1,9 +1,16 @@
 
+
 export interface MenuItem {
   id: string;
   name: string;
-  price: number;
+  price: number; // Prices are in INR
   category: string; // e.g., Appetizer, Main Course, Drink
+}
+
+export interface NewMenuItem {
+  name: string;
+  price: number;
+  category: string;
 }
 
 export interface OrderItem extends MenuItem {

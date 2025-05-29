@@ -12,8 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { MENU_ITEMS, TABLE_NUMBERS } from '@/lib/constants';
-import type { Order, OrderItem, User } from '@/types';
+import { TABLE_NUMBERS } from '@/lib/constants';
+import { getMenuItems } from '@/lib/menuManager'; // Use dynamic menu items
+import type { MenuItem as MenuItemType, Order, OrderItem, User } from '@/types'; // Renamed MenuItem to avoid conflict
 import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle } from 'lucide-react';
 import Image from 'next/image';
 import {
@@ -45,6 +46,13 @@ export default function WaiterPage() {
   const [orderForBillConfirmation, setOrderForBillConfirmation] = useState<Order | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [displayedReadyNotifications, setDisplayedReadyNotifications] = useState<Set<string>>(new Set());
+  const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]); // For dynamic menu
+
+  useEffect(() => {
+    if (isMounted) {
+      setMenuOptions(getMenuItems());
+    }
+  }, [isMounted]);
 
   const calculateSubtotal = useCallback((items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -97,7 +105,7 @@ export default function WaiterPage() {
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
-    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
+    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'billed' && o.status !== 'cancelled');
   }, [selectedTable, activeOrders, isMounted]);
 
   const allUnbilledOrdersList = useMemo(() => {
@@ -118,7 +126,7 @@ export default function WaiterPage() {
         toast({ title: 'Error', description: 'Please select a table first.', variant: 'destructive'});
         return;
     }
-    const menuItem = MENU_ITEMS.find(item => item.id === selectedMenuItemId);
+    const menuItem = menuOptions.find(item => item.id === selectedMenuItemId);
     if (!menuItem) return;
 
     setCurrentOrderItems(prevItems => {
@@ -152,10 +160,10 @@ export default function WaiterPage() {
     const tableNum = parseInt(selectedTable);
     let orderToUpdate: Order;
 
-    const existingPendingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
+    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'billed' && o.status !== 'cancelled');
 
-    if (existingPendingOrder) {
-      orderToUpdate = { ...existingPendingOrder };
+    if (existingOrder) {
+      orderToUpdate = { ...existingOrder };
       
       const updatedItemsMap = new Map<string, OrderItem>();
       orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item})); 
@@ -209,7 +217,7 @@ export default function WaiterPage() {
       const subtotal = calculateSubtotal(orderForBillConfirmation.items);
       toast({ 
         title: 'Bill Requested', 
-        description: `Bill request for Table ${orderForBillConfirmation.tableNumber} (Subtotal: $${subtotal.toFixed(2)}) sent. Admin notified.` 
+        description: `Bill request for Table ${orderForBillConfirmation.tableNumber} (Subtotal: ₹${subtotal.toFixed(2)}) sent. Admin notified.` 
       });
       loadActiveOrders();
     } else {
@@ -217,9 +225,7 @@ export default function WaiterPage() {
     }
     
     setCurrentOrderItems([]); 
-    if (selectedTable === String(orderForBillConfirmation.tableNumber)) {
-      // Keep table selected to see its status change
-    }
+    // Do not clear selectedTable here, so user can see the status update.
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
   };
@@ -229,14 +235,14 @@ export default function WaiterPage() {
 
   const getStatusBadgeClass = (status: Order['status']): string => {
     switch (status) {
-      case 'pending': return 'bg-blue-500 text-white';
-      case 'preparing': return 'bg-yellow-500 text-black';
-      case 'ready': return 'bg-green-500 text-white animate-pulse';
-      case 'served': return 'bg-purple-500 text-white';
-      case 'bill_requested': return 'bg-orange-500 text-white';
-      case 'billed': return 'bg-gray-400 text-black'; // Might not be used much by waiter
-      case 'paid': return 'bg-teal-500 text-white'; // Might not be used much by waiter
-      default: return 'bg-gray-200 text-gray-700';
+      case 'pending': return 'bg-blue-100 text-blue-700 border-blue-300';
+      case 'preparing': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
+      case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
+      case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
+      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300'; 
+      case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
+      default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
   };
 
@@ -291,16 +297,17 @@ export default function WaiterPage() {
                   <Separator />
                   <div className="space-y-2">
                     <Label htmlFor="menuItem">Menu Item</Label>
-                    <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={!selectedTable}>
+                    <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={!selectedTable || menuOptions.length === 0}>
                       <SelectTrigger id="menuItem">
-                        <SelectValue placeholder="Select an item" />
+                        <SelectValue placeholder={menuOptions.length === 0 ? "Loading menu..." : "Select an item"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {MENU_ITEMS.map(item => (
-                          <SelectItem key={item.id} value={item.id}>{item.name} - ${item.price.toFixed(2)}</SelectItem>
+                        {menuOptions.map(item => (
+                          <SelectItem key={item.id} value={item.id}>{item.name} - ₹{item.price.toFixed(2)}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                     {menuOptions.length === 0 && <p className="text-xs text-muted-foreground">Menu is empty. Admin needs to add items.</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="quantity">Quantity</Label>
@@ -313,7 +320,7 @@ export default function WaiterPage() {
                       disabled={!selectedTable}
                     />
                   </div>
-                  <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable}>
+                  <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable || menuOptions.length === 0}>
                     <PlusCircle className="mr-2" /> Add Item to Current Selection
                   </Button>
                 </CardContent>
@@ -323,7 +330,7 @@ export default function WaiterPage() {
                 <Card className="shadow-lg">
                   <CardHeader>
                     <CardTitle className="text-xl">Current Items for Submission</CardTitle>
-                    {selectedTable && <CardDescription>For Table {selectedTable} (Subtotal for this selection: ${calculateSubtotal(currentOrderItems).toFixed(2)})</CardDescription>}
+                    {selectedTable && <CardDescription>For Table {selectedTable} (Subtotal for this selection: ₹{calculateSubtotal(currentOrderItems).toFixed(2)})</CardDescription>}
                     {!selectedTable && <CardDescription>Select a table to start an order.</CardDescription>}
                   </CardHeader>
                   <CardContent>
@@ -338,7 +345,7 @@ export default function WaiterPage() {
                           <li key={item.id + Math.random()} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
                             <div>
                               <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
-                              <p className="text-sm text-primary">${(item.price * item.quantity).toFixed(2)}</p>
+                              <p className="text-sm text-primary">₹{(item.price * item.quantity).toFixed(2)}</p>
                             </div>
                             <Button variant="ghost" size="icon" onClick={() => handleRemoveItemFromCurrentSelection(item.id)}>
                               <Trash2 className="w-4 h-4 text-destructive" />
@@ -362,8 +369,8 @@ export default function WaiterPage() {
                     <CardTitle className="text-xl flex items-center justify-between">
                       {selectedTable ? `Active Order for Table ${selectedTable}` : "Select Table to View Order"}
                       {pendingOrderForSelectedTable?.status && (
-                        <Badge className={`${getStatusBadgeClass(pendingOrderForSelectedTable.status)} capitalize`}>
-                          {pendingOrderForSelectedTable.status === 'ready' && <BellRing className="w-4 h-4 mr-1" />}
+                        <Badge variant="outline" className={`${getStatusBadgeClass(pendingOrderForSelectedTable.status)} capitalize font-medium`}>
+                          {pendingOrderForSelectedTable.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
                           {pendingOrderForSelectedTable.status.replace('_', ' ')}
                         </Badge>
                       )}
@@ -371,7 +378,7 @@ export default function WaiterPage() {
                     {selectedTable && !pendingOrderForSelectedTable && <CardDescription>No active items for this table. Add and submit items above.</CardDescription>}
                     {selectedTable && pendingOrderForSelectedTable && 
                         <CardDescription>
-                            Total subtotal: ${calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}
+                            Total subtotal: ₹{calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}
                         </CardDescription>
                     }
                   </CardHeader>
@@ -384,7 +391,7 @@ export default function WaiterPage() {
                           <li key={item.id} className="p-2 rounded-md bg-muted/30">
                             <div className="flex justify-between items-center">
                                 <span>{item.name} (x{item.quantity})</span>
-                                <span>${(item.price * item.quantity).toFixed(2)}</span>
+                                <span>₹{(item.price * item.quantity).toFixed(2)}</span>
                             </div>
                           </li>
                         ))}
@@ -426,7 +433,7 @@ export default function WaiterPage() {
                             <span className="text-lg font-semibold">Table {order.tableNumber}</span>
                             <span className="ml-2 text-xs text-muted-foreground">(ID: ...{order.id.slice(-6)})</span>
                           </div>
-                           <Badge className={`${getStatusBadgeClass(order.status)} capitalize`}>
+                           <Badge variant="outline" className={`${getStatusBadgeClass(order.status)} capitalize font-medium`}>
                             {order.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
                             {order.status.replace('_', ' ')}
                           </Badge>
@@ -435,13 +442,13 @@ export default function WaiterPage() {
                           Total Items: {order.items.reduce((acc, item) => acc + item.quantity, 0)}
                         </p>
                         <p className="text-sm font-medium mb-2">
-                          Subtotal: ${calculateSubtotal(order.items).toFixed(2)}
+                          Subtotal: ₹{calculateSubtotal(order.items).toFixed(2)}
                         </p>
                         {order.waiterUsername && <p className="text-xs text-muted-foreground">Waiter: {order.waiterUsername}</p>}
                         <details className="text-xs mt-1">
                             <summary className="cursor-pointer text-muted-foreground hover:text-foreground">View Items ({order.items.length})</summary>
                             <ul className="mt-1 list-disc list-inside pl-4 space-y-0.5 text-muted-foreground">
-                            {order.items.map(item => <li key={item.id + order.id}>{item.name} x{item.quantity} (${(item.price * item.quantity).toFixed(2)})</li>)}
+                            {order.items.map(item => <li key={item.id + order.id}>{item.name} x{item.quantity} (₹{(item.price * item.quantity).toFixed(2)})</li>)}
                             </ul>
                         </details>
                         <p className="mt-2 text-xs text-muted-foreground/80">Last update: {new Date(order.timestamp).toLocaleTimeString()}</p>
@@ -468,12 +475,12 @@ export default function WaiterPage() {
                   <ul className="list-disc list-inside pl-4">
                       {orderForBillConfirmation.items.map(item => (
                           <li key={item.id}>
-                              {item.name} (x{item.quantity}) - ${(item.price * item.quantity).toFixed(2)}
+                              {item.name} (x{item.quantity}) - ₹{(item.price * item.quantity).toFixed(2)}
                           </li>
                       ))}
                   </ul>
                   <Separator className="my-2" />
-                  <p className="font-bold text-base">Order Subtotal: ${subtotalForBillDialog.toFixed(2)}</p>
+                  <p className="font-bold text-base">Order Subtotal: ₹{subtotalForBillDialog.toFixed(2)}</p>
               </div>
               <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => { setIsBillConfirmOpen(false); setOrderForBillConfirmation(null); }}>Cancel</AlertDialogCancel>

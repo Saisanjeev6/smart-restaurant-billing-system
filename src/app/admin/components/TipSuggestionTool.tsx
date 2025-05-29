@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Added useEffect
 import { useForm, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -39,14 +40,11 @@ export function TipSuggestionTool({ initialOrderDetails = "" }: TipSuggestionToo
     },
   });
   
-  // useEffect to update orderDetails if initialOrderDetails changes
-  // This might be useful if the component is part of a larger form that dynamically loads order info
-  useState(() => {
+  useEffect(() => {
     if (initialOrderDetails) {
       form.reset({ ...form.getValues(), orderDetails: initialOrderDetails });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  });
+  }, [initialOrderDetails, form]);
 
 
   const onSubmit: SubmitHandler<TipSuggestionFormValues> = async (data) => {
@@ -68,7 +66,7 @@ export function TipSuggestionTool({ initialOrderDetails = "" }: TipSuggestionToo
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-xl"><Sparkles className="text-primary" /> AI Tip Suggester</CardTitle>
-        <CardDescription>Get AI-powered tip recommendations based on customer experience.</CardDescription>
+        <CardDescription>Get AI-powered tip recommendations based on customer experience. Currency is INR (₹).</CardDescription>
       </CardHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -93,7 +91,7 @@ export function TipSuggestionTool({ initialOrderDetails = "" }: TipSuggestionToo
                 <FormItem>
                   <FormLabel>Order Details</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="e.g., 2x Pizza, 1x Salad. Total: $45.50" {...field} rows={2} />
+                    <Textarea placeholder="e.g., 2x Pizza, 1x Salad. Total: ₹3200.50" {...field} rows={2} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -106,7 +104,7 @@ export function TipSuggestionTool({ initialOrderDetails = "" }: TipSuggestionToo
                 <FormItem>
                   <FormLabel>Payment Information</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Paid with Visa ending 1234" {...field} />
+                    <Input placeholder="e.g., Paid with UPI ID example@upi" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -123,7 +121,7 @@ export function TipSuggestionTool({ initialOrderDetails = "" }: TipSuggestionToo
                 <CardTitle className="mb-2 text-lg">Suggestion:</CardTitle>
                 <div className="space-y-2 text-sm">
                   <p className="flex items-center"><Percent className="w-4 h-4 mr-2 text-primary" /><strong>Suggested Tip Percentage:</strong> {suggestion.suggestedTipPercentage.toFixed(1)}%</p>
-                  <p className="flex items-center"><DollarSign className="w-4 h-4 mr-2 text-primary" /><strong>Suggested Tip Amount:</strong> ${suggestion.suggestedTipAmount.toFixed(2)}</p>
+                  <p className="flex items-center"><DollarSign className="w-4 h-4 mr-2 text-primary" /><strong>Suggested Tip Amount:</strong> ₹{suggestion.suggestedTipAmount.toFixed(2)}</p>
                   <p><strong>Reasoning:</strong> {suggestion.reasoning}</p>
                 </div>
               </Card>

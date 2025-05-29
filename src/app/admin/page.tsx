@@ -8,18 +8,19 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { MENU_ITEMS, TABLE_NUMBERS, TAX_RATE } from '@/lib/constants';
+import { TAX_RATE } from '@/lib/constants';
 import type { Order, OrderItem, Bill, User } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
-import { ManageUsersTool } from './components/ManageUsersTool'; // Updated import
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ManageUsersTool } from './components/ManageUsersTool';
+import { ManageMenuTool } from './components/ManageMenuTool'; // New import
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
+import { getMenuItems } from '@/lib/menuManager'; // Import getMenuItems
 import { getSharedOrders, initializeSharedOrdersWithMockData, updateSharedOrderStatus } from '@/lib/orderManager';
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
@@ -29,72 +30,33 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { Badge } from '@/components/ui/badge';
 
-
+// MOCK_ORDERS_SEED needs to be updated with actual menu items or IDs that exist after dynamic menu
+// For now, let's assume it uses IDs from INITIAL_MENU_ITEMS
 const MOCK_ORDERS_SEED: Order[] = [
   {
-    id: 'ORD-1001', tableNumber: 3, items: [{ ...MENU_ITEMS[0], quantity: 2 }, { ...MENU_ITEMS[2], quantity: 1 }],
+    id: 'ORD-1001', tableNumber: 3, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
     status: 'paid', timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'ORD-1002', tableNumber: 5, items: [{ ...MENU_ITEMS[3], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }],
+    id: 'ORD-1002', tableNumber: 5, items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }, { id: '6', name: 'New York Cheesecake', price: 300, category: 'Dessert', quantity: 2 }],
     status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'TAKE-001', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[7], quantity: 1 }],
+    id: 'TAKE-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
     status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway'
   },
   {
-    id: 'ORD-1004', tableNumber: 1, items: [{ ...MENU_ITEMS[1], quantity: 1 }, { ...MENU_ITEMS[5], quantity: 1 }],
+    id: 'ORD-1004', tableNumber: 1, items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }],
     status: 'ready', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'TAKE-002', items: [{ ...MENU_ITEMS[0], quantity: 2 }],
+    id: 'TAKE-002', items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }],
     status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway'
   },
-  {
-    id: 'ORD-1005', items: [{ ...MENU_ITEMS[0], quantity: 2 }],
-    tableNumber: 9, status: 'pending', timestamp: new Date(Date.now() - 86400000 * 8).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-  {
-    id: 'ORD-1006', tableNumber: 4, items: [{ ...MENU_ITEMS[2], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 2 }],
+   {
+    id: 'ORD-1006', tableNumber: 4, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
     status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
-  {
-    id: 'TAKE-003', items: [{ ...MENU_ITEMS[4], quantity: 1 }, { ...MENU_ITEMS[6], quantity: 1 }],
-    status: 'paid', timestamp: new Date(Date.now() - 600000).toISOString(), type: 'takeaway'
-  },
-  {
-    id: 'ORD-1007', tableNumber: 7, items: [{ ...MENU_ITEMS[3], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-   {
-    id: 'ORD-1008', items: [{ ...MENU_ITEMS[8], quantity: 1 }, { ...MENU_ITEMS[4], quantity: 1 }],
-    tableNumber: 10, status: 'pending', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 2)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-  {
-    id: 'ORD-1009', tableNumber: 2, items: [{ ...MENU_ITEMS[0], quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 1)).setDate(15)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-   {
-    id: 'ORD-1010', tableNumber: 6, items: [{ ...MENU_ITEMS[5], quantity: 2 }],
-    status: 'paid', timestamp: new Date().toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-  {
-    id: 'ORD-1011', tableNumber: 8, items: [{ ...MENU_ITEMS[9], quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-  {
-    id: 'TAKE-004', items: [{ ...MENU_ITEMS[1], quantity: 2 }, { ...MENU_ITEMS[7], quantity: 2 }],
-    status: 'pending', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 4)).toISOString(), type: 'takeaway'
-  },
-   {
-    id: 'TAKE-005', items: [{ ...MENU_ITEMS[4], quantity: 1 }],
-    status: 'ready', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 5)).setDate(5)).toISOString(), type: 'takeaway'
-  },
-  {
-    id: 'ORD-1012', tableNumber: 11, items: [{ ...MENU_ITEMS[1], quantity: 1 }, { ...MENU_ITEMS[3], quantity: 1 }],
-    status: 'bill_requested', timestamp: new Date(Date.now() - 120000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  }
 ];
 
 type AnalyticsPeriod = 'today' | 'week' | 'month' | '2months' | 'custom';
@@ -151,7 +113,7 @@ export default function AdminPage() {
       default: return '';
     }
   }, []);
-
+  
   const paidOrders = useMemo(() => allOrders.filter(order => order.status === 'paid'), [allOrders]);
 
   const activeOrdersList = useMemo(() => {
@@ -257,7 +219,7 @@ export default function AdminPage() {
   const orderDetailsForTipTool = useMemo(() => {
     if (orderForBill && currentBill) {
       const itemsSummary = orderForBill.items.map(item => `${item.name} (x${item.quantity})`).join(', ');
-      return `Items: ${itemsSummary}. Subtotal: $${currentBill.subtotal.toFixed(2)}. Tax: $${currentBill.taxAmount.toFixed(2)}. Total: $${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
+      return `Items: ${itemsSummary}. Subtotal: ₹${currentBill.subtotal.toFixed(2)}. Tax: ₹${currentBill.taxAmount.toFixed(2)}. Total: ₹${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
     }
     return '';
   }, [orderForBill, currentBill]);
@@ -300,7 +262,8 @@ export default function AdminPage() {
       router.push('/login');
     } else {
       setCurrentUser(user);
-      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
+      initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED); // Initialize if localstorage is empty
+      getMenuItems(); // Ensure menu items are initialized
       setIsMounted(true);
     }
   }, [router]);
@@ -418,11 +381,12 @@ export default function AdminPage() {
       <AppHeader title="Admin Dashboard" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-6"> {/* Updated grid-cols */}
             <TabsTrigger value="orders" className="flex items-center gap-2"><ListChecks /> Active Orders</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText /> Bill Management</TabsTrigger>
             <TabsTrigger value="tips" className="flex items-center gap-2"><Sparkles /> AI Tip Suggester</TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Users</TabsTrigger> {/* Updated tab name */}
+            <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Users</TabsTrigger>
+            <TabsTrigger value="menu" className="flex items-center gap-2"><ListPlus /> Manage Menu</TabsTrigger> {/* New Tab */}
             <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart /> Sales Analytics</TabsTrigger>
           </TabsList>
 
@@ -430,13 +394,13 @@ export default function AdminPage() {
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle>Manage Active Orders</CardTitle>
-                <CardDescription>View and manage all current (unpaid) restaurant orders. Refreshing every 7 seconds.</CardDescription>
+                <CardDescription>View and manage all current (unpaid/unbilled) restaurant orders. Refreshing every 7 seconds.</CardDescription>
               </CardHeader>
               <CardContent>
                 {activeOrdersList.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
                         <Image src="https://placehold.co/400x250.png" alt="Restaurant scene" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant people" />
-                        <p>No active (unpaid) orders at the moment.</p>
+                        <p>No active orders at the moment.</p>
                     </div>
                 ) : (
                 <Table>
@@ -462,7 +426,7 @@ export default function AdminPage() {
                             : `Token ${order.id.slice(-6)}`}
                         </TableCell>
                         <TableCell>{order.items.length}</TableCell>
-                        <TableCell>${calculateOrderTotal(order.items).toFixed(2)}</TableCell>
+                        <TableCell>₹{calculateOrderTotal(order.items).toFixed(2)}</TableCell>
                         <TableCell>
                            <Badge variant="outline" className={`${getStatusBadgeClass(order.status)} capitalize font-medium`}>
                             {order.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
@@ -507,7 +471,7 @@ export default function AdminPage() {
                         <div className="flex flex-col">
                            <span className="font-semibold">Table {request.tableNumber} <span className="text-xs font-normal text-muted-foreground">(Order ...{request.id.slice(-6)})</span></span>
                            <span className="text-xs text-muted-foreground">Requested by: {request.waiterUsername || 'N/A'} at {format(parseISO(request.timestamp), "p")}</span>
-                           <span className="text-xs text-muted-foreground">Items: {request.items.reduce((acc, item) => acc + item.quantity, 0)}, Subtotal: ${calculateOrderTotal(request.items).toFixed(2)}</span>
+                           <span className="text-xs text-muted-foreground">Items: {request.items.reduce((acc, item) => acc + item.quantity, 0)}, Subtotal: ₹{calculateOrderTotal(request.items).toFixed(2)}</span>
                         </div>
                       </Button>
                     ))
@@ -526,18 +490,18 @@ export default function AdminPage() {
                       {orderForBill.items.map(item => (
                         <li key={item.id} className="flex justify-between">
                           <span>{item.name} x{item.quantity}</span>
-                          <span>${(item.price * item.quantity).toFixed(2)}</span>
+                          <span>₹{(item.price * item.quantity).toFixed(2)}</span>
                         </li>
                       ))}
                     </ul>
                     <Separator />
-                    <div className="flex justify-between text-sm"><p>Subtotal:</p><p>${currentBill.subtotal.toFixed(2)}</p></div>
-                    <div className="flex justify-between text-sm"><p>Tax ({TAX_RATE * 100}%):</p><p>${currentBill.taxAmount.toFixed(2)}</p></div>
+                    <div className="flex justify-between text-sm"><p>Subtotal:</p><p>₹{currentBill.subtotal.toFixed(2)}</p></div>
+                    <div className="flex justify-between text-sm"><p>Tax ({TAX_RATE * 100}%):</p><p>₹{currentBill.taxAmount.toFixed(2)}</p></div>
                     {currentBill.discountAmount > 0 && (
-                      <div className="flex justify-between text-sm text-destructive"><p>Discount:</p><p>-${currentBill.discountAmount.toFixed(2)}</p></div>
+                      <div className="flex justify-between text-sm text-destructive"><p>Discount:</p><p>-₹{currentBill.discountAmount.toFixed(2)}</p></div>
                     )}
                     <Separator />
-                    <div className="flex justify-between text-lg font-bold"><p>Total:</p><p>${currentBill.totalAmount.toFixed(2)}</p></div>
+                    <div className="flex justify-between text-lg font-bold"><p>Total:</p><p>₹{currentBill.totalAmount.toFixed(2)}</p></div>
 
                     {currentBill.paymentStatus === 'pending' && orderForBill.status === 'bill_requested' && (
                       <>
@@ -582,7 +546,10 @@ export default function AdminPage() {
             <TipSuggestionTool initialOrderDetails={orderDetailsForTipTool} />
           </TabsContent>
           <TabsContent value="users">
-            <ManageUsersTool /> {/* Updated component */}
+            <ManageUsersTool />
+          </TabsContent>
+          <TabsContent value="menu"> {/* New Tab Content */}
+            <ManageMenuTool />
           </TabsContent>
           <TabsContent value="analytics">
             <Card className="shadow-lg">
@@ -676,7 +643,7 @@ export default function AdminPage() {
                       <CardTitle className="text-base font-medium flex items-center gap-2"><DollarSign className="text-green-500"/>Total Sales</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-2xl font-bold">${analyticsData.totalSales.toFixed(2)}</p>
+                      <p className="text-2xl font-bold">₹{analyticsData.totalSales.toFixed(2)}</p>
                     </CardContent>
                   </Card>
                   <Card className="bg-card/50">
@@ -692,7 +659,7 @@ export default function AdminPage() {
                       <CardTitle className="text-base font-medium flex items-center gap-2"><DollarSign className="text-purple-500" /><Percent className="text-purple-500 w-4 h-4 -ml-4 -mt-1" />Avg. Order Value</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <p className="text-2xl font-bold">${analyticsData.averageOrderValue.toFixed(2)}</p>
+                      <p className="text-2xl font-bold">₹{analyticsData.averageOrderValue.toFixed(2)}</p>
                     </CardContent>
                   </Card>
                 </div>
@@ -713,7 +680,7 @@ export default function AdminPage() {
                           tickFormatter={(value) => value.slice(0, 3)}
                         />
                         <YAxis
-                          tickFormatter={(value) => `$${value}`}
+                          tickFormatter={(value) => `₹${value}`}
                           tickLine={false}
                           axisLine={false}
                           tickMargin={8}
