@@ -13,9 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { TABLE_NUMBERS } from '@/lib/constants';
-import { getMenuItems } from '@/lib/menuManager'; // Use dynamic menu items
-import type { MenuItem as MenuItemType, Order, OrderItem, User } from '@/types'; // Renamed MenuItem to avoid conflict
-import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle } from 'lucide-react';
+import { getMenuItems } from '@/lib/menuManager';
+import type { MenuItem as MenuItemType, Order, OrderItem, User, OrderStatus } from '@/types';
+import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon } from 'lucide-react';
 import Image from 'next/image';
 import {
   AlertDialog,
@@ -32,6 +32,9 @@ import { getCurrentUser } from '@/lib/auth';
 import { getSharedOrders, addOrUpdateSharedOrder, updateSharedOrderStatus } from '@/lib/orderManager';
 import { Badge } from '@/components/ui/badge';
 
+type TableDisplayStatus = 'vacant' | 'selected' | 'occupied_pending' | 'occupied_ready' | 'occupied_bill_requested' | 'occupied_billed_paid';
+
+
 export default function WaiterPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -46,13 +49,18 @@ export default function WaiterPage() {
   const [orderForBillConfirmation, setOrderForBillConfirmation] = useState<Order | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [displayedReadyNotifications, setDisplayedReadyNotifications] = useState<Set<string>>(new Set());
-  const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]); // For dynamic menu
+  const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
 
   useEffect(() => {
-    if (isMounted) {
+    setIsMounted(true);
+    const user = getCurrentUser();
+    if (!user || (user.role !== 'waiter' && user.role !== 'admin')) {
+      router.push('/login');
+    } else {
+      setCurrentUser(user);
       setMenuOptions(getMenuItems());
     }
-  }, [isMounted]);
+  }, [router]);
 
   const calculateSubtotal = useCallback((items: OrderItem[]) => {
     return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -83,17 +91,7 @@ export default function WaiterPage() {
       }
     }
   }, [isMounted, currentUser, toast, displayedReadyNotifications]);
-
-  useEffect(() => {
-    const user = getCurrentUser();
-    if (!user || (user.role !== 'waiter' && user.role !== 'admin')) {
-      router.push('/login');
-    } else {
-      setCurrentUser(user);
-      setIsMounted(true);
-    }
-  }, [router]);
-
+  
   useEffect(() => {
     if(isMounted){
         loadActiveOrders();
@@ -105,17 +103,23 @@ export default function WaiterPage() {
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
-    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'billed' && o.status !== 'cancelled');
+    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled');
   }, [selectedTable, activeOrders, isMounted]);
-
-  const allUnbilledOrdersList = useMemo(() => {
-    if (!isMounted) return [];
-    return activeOrders
-      .filter(order => order.type === 'dine-in' && order.status !== 'billed' && order.status !== 'paid' && order.status !== 'cancelled')
-      .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
-  }, [activeOrders, isMounted]);
   
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
+
+  const allUnbilledDineInOrdersList = useMemo(() => {
+    if (!isMounted) return [];
+    return activeOrders
+      .filter(order => order.type === 'dine-in' && order.status !== 'paid' && order.status !== 'cancelled')
+      .sort((a, b) => (a.tableNumber || 0) - (b.tableNumber || 0));
+  }, [activeOrders, isMounted]);
+
+
+  const handleSelectTable = (tableNum: number) => {
+    setSelectedTable(String(tableNum));
+    setCurrentOrderItems([]); // Clear previous selection when changing tables
+  };
 
   const handleAddItemToOrder = () => {
     if (!selectedMenuItemId || quantity <= 0) {
@@ -123,7 +127,7 @@ export default function WaiterPage() {
       return;
     }
     if (!selectedTable) {
-        toast({ title: 'Error', description: 'Please select a table first.', variant: 'destructive'});
+        toast({ title: 'Error', description: 'Please select a table from the grid first.', variant: 'destructive'});
         return;
     }
     const menuItem = menuOptions.find(item => item.id === selectedMenuItemId);
@@ -160,7 +164,7 @@ export default function WaiterPage() {
     const tableNum = parseInt(selectedTable);
     let orderToUpdate: Order;
 
-    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'billed' && o.status !== 'cancelled');
+    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled');
 
     if (existingOrder) {
       orderToUpdate = { ...existingOrder };
@@ -178,7 +182,13 @@ export default function WaiterPage() {
       });
       orderToUpdate.items = Array.from(updatedItemsMap.values());
       orderToUpdate.timestamp = new Date().toISOString();
-      orderToUpdate.status = 'pending'; // Ensure it goes back to pending if it was 'ready' or 'served'
+      // Keep current status unless it was 'billed' or 'paid', then reset to 'pending' or 'served' or 'ready' as appropriate
+      if (orderToUpdate.status === 'billed' || orderToUpdate.status === 'paid') {
+        orderToUpdate.status = 'pending';
+      } else if (orderToUpdate.status !== 'pending' && orderToUpdate.status !== 'preparing' && orderToUpdate.status !== 'ready' && orderToUpdate.status !== 'served' && orderToUpdate.status !== 'bill_requested') {
+         orderToUpdate.status = 'pending'; // Default back to pending if items added to a non-active state
+      }
+
       toast({ title: 'Order Updated', description: `Items added/updated for Table ${selectedTable}. Sent to kitchen.` });
     } else { 
       orderToUpdate = {
@@ -199,7 +209,7 @@ export default function WaiterPage() {
     loadActiveOrders(); 
   };
 
-  const handleGenerateBillRequest = () => { 
+  const handleRequestBillForSelectedTable = () => { 
     if (!pendingOrderForSelectedTable) { 
       toast({ title: 'Error', description: `No active order found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
       return;
@@ -225,26 +235,54 @@ export default function WaiterPage() {
     }
     
     setCurrentOrderItems([]); 
-    // Do not clear selectedTable here, so user can see the status update.
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
+    // setSelectedTable(''); // Optionally clear selected table after bill request
   };
 
-  const canSubmitCurrentSelection = selectedTable && currentOrderItems.length > 0;
-  const canGenerateBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 && (pendingOrderForSelectedTable.status !== 'bill_requested' && pendingOrderForSelectedTable.status !== 'billed' && pendingOrderForSelectedTable.status !== 'paid');
-
-  const getStatusBadgeClass = (status: Order['status']): string => {
+  const getStatusBadgeClass = (status: OrderStatus): string => {
     switch (status) {
       case 'pending': return 'bg-blue-100 text-blue-700 border-blue-300';
       case 'preparing': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
-      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300'; 
+      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400'; // More distinct for billed
       case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
   };
+
+  const getTableDisplayStatus = (tableNum: number): TableDisplayStatus => {
+    if (String(tableNum) === selectedTable) return 'selected';
+    const order = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'cancelled');
+    if (!order || order.status === 'billed' || order.status === 'paid') return 'vacant';
+    if (order.status === 'bill_requested') return 'occupied_bill_requested';
+    if (order.status === 'ready' || order.status === 'served') return 'occupied_ready';
+    return 'occupied_pending'; // Covers 'pending', 'preparing'
+  };
+
+  const getTableStatusStyle = (status: TableDisplayStatus): string => {
+    switch (status) {
+      case 'vacant': return 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-gray-300';
+      case 'selected': return 'bg-primary text-primary-foreground border-primary ring-2 ring-primary ring-offset-2';
+      case 'occupied_pending': return 'bg-blue-100 hover:bg-blue-200 text-blue-700 border-blue-400';
+      case 'occupied_ready': return 'bg-green-100 hover:bg-green-200 text-green-700 border-green-400 animate-pulse';
+      case 'occupied_bill_requested': return 'bg-orange-100 hover:bg-orange-200 text-orange-700 border-orange-400';
+      default: return 'bg-white hover:bg-gray-50 border-gray-300';
+    }
+  };
+
+  const getTableStatusIcon = (status: TableDisplayStatus) => {
+    switch (status) {
+        case 'vacant': return <Coffee className="w-4 h-4 text-gray-400" />;
+        case 'occupied_pending': return <Utensils className="w-4 h-4 text-blue-600" />;
+        case 'occupied_ready': return <BellRing className="w-4 h-4 text-green-600" />;
+        case 'occupied_bill_requested': return <FileTextIcon className="w-4 h-4 text-orange-600" />;
+        default: return null;
+    }
+  };
+
 
   if (!isMounted || !currentUser) {
     return (
@@ -253,6 +291,13 @@ export default function WaiterPage() {
       </div>
     );
   }
+  
+  const canSubmitCurrentSelection = selectedTable && currentOrderItems.length > 0;
+  const canRequestBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 && 
+                                         (pendingOrderForSelectedTable.status !== 'bill_requested' && 
+                                          pendingOrderForSelectedTable.status !== 'billed' && 
+                                          pendingOrderForSelectedTable.status !== 'paid');
+
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -260,156 +305,163 @@ export default function WaiterPage() {
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orderManagement" className="w-full">
           <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="orderManagement" className="flex items-center gap-2"><ClipboardEdit /> Order Management</TabsTrigger>
+            <TabsTrigger value="orderManagement" className="flex items-center gap-2"><LayoutGrid /> Table Management</TabsTrigger>
             <TabsTrigger value="allActiveOrders" className="flex items-center gap-2"><ListOrdered /> All Active Orders</TabsTrigger>
           </TabsList>
 
           <TabsContent value="orderManagement">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card className="shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-2xl">Create / Add to Order</CardTitle>
-                  <CardDescription>Select table, add items to current selection for submission.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="tableNumber">Table Number</Label>
-                    <Select 
-                      value={selectedTable} 
-                      onValueChange={(value) => {
-                        setSelectedTable(value);
-                        setCurrentOrderItems([]); 
-                      }}
-                    >
-                      <SelectTrigger id="tableNumber">
-                        <SelectValue placeholder="Select a table" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TABLE_NUMBERS.map(num => (
-                          <SelectItem key={num} value={String(num)}>Table {num}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {currentOrderItems.length > 0 && selectedTable && (
-                        <p className="text-xs text-muted-foreground">Adding items for Table {selectedTable}. Submit to add these to table's order.</p>
-                    )}
-                  </div>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label htmlFor="menuItem">Menu Item</Label>
-                    <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={!selectedTable || menuOptions.length === 0}>
-                      <SelectTrigger id="menuItem">
-                        <SelectValue placeholder={menuOptions.length === 0 ? "Loading menu..." : "Select an item"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {menuOptions.map(item => (
-                          <SelectItem key={item.id} value={item.id}>{item.name} - ₹{item.price.toFixed(2)}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                     {menuOptions.length === 0 && <p className="text-xs text-muted-foreground">Menu is empty. Admin needs to add items.</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">Quantity</Label>
-                    <Input
-                      id="quantity"
-                      type="number"
-                      min="1"
-                      value={quantity}
-                      onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value) || 1)}
-                      disabled={!selectedTable}
-                    />
-                  </div>
-                  <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || !selectedTable || menuOptions.length === 0}>
-                    <PlusCircle className="mr-2" /> Add Item to Current Selection
-                  </Button>
-                </CardContent>
-              </Card>
+            <Card className="mb-6 shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-xl">Select a Table</CardTitle>
+                <CardDescription>Click on a table below to manage its order.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3 p-2">
+                  {TABLE_NUMBERS.map(num => {
+                    const status = getTableDisplayStatus(num);
+                    return (
+                      <Button
+                        key={num}
+                        variant="outline"
+                        className={`flex flex-col items-center justify-center h-20 aspect-square shadow-sm transition-all duration-150 ease-in-out transform hover:scale-105 ${getTableStatusStyle(status)}`}
+                        onClick={() => handleSelectTable(num)}
+                      >
+                        <span className="text-lg font-bold">{num}</span>
+                        <div className="mt-1">
+                           {getTableStatusIcon(status)}
+                        </div>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
 
-              <div className="space-y-6">
+            {selectedTable && (
+              <div className="grid gap-6 lg:grid-cols-2 mt-6">
                 <Card className="shadow-lg">
                   <CardHeader>
-                    <CardTitle className="text-xl">Current Items for Submission</CardTitle>
-                    {selectedTable && <CardDescription>For Table {selectedTable} (Subtotal for this selection: ₹{calculateSubtotal(currentOrderItems).toFixed(2)})</CardDescription>}
-                    {!selectedTable && <CardDescription>Select a table to start an order.</CardDescription>}
+                    <CardTitle className="text-xl">Create / Add to Order for Table {selectedTable}</CardTitle>
+                    <CardDescription>Add items to the current selection for Table {selectedTable}.</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    {currentOrderItems.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
-                        <Image src="https://placehold.co/300x200.png" alt="Empty plate" width={150} height={100} className="mb-4 rounded-lg opacity-70" data-ai-hint="empty plate restaurant"/>
-                        <p>{selectedTable ? "No items in current selection." : "Select a table and add items."}</p>
-                      </div>
-                    ) : (
-                      <ul className="space-y-3">
-                        {currentOrderItems.map(item => (
-                          <li key={item.id + Math.random()} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
-                            <div>
-                              <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
-                              <p className="text-sm text-primary">₹{(item.price * item.quantity).toFixed(2)}</p>
-                            </div>
-                            <Button variant="ghost" size="icon" onClick={() => handleRemoveItemFromCurrentSelection(item.id)}>
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                  <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                      <Label htmlFor="menuItem">Menu Item</Label>
+                      <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={menuOptions.length === 0}>
+                        <SelectTrigger id="menuItem">
+                          <SelectValue placeholder={menuOptions.length === 0 ? "Loading menu..." : "Select an item"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {menuOptions.map(item => (
+                            <SelectItem key={item.id} value={item.id}>{item.name} - ₹{item.price.toFixed(2)}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {menuOptions.length === 0 && <p className="text-xs text-muted-foreground">Menu is empty. Admin needs to add items.</p>}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="quantity">Quantity</Label>
+                      <Input
+                        id="quantity"
+                        type="number"
+                        min="1"
+                        value={quantity}
+                        onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <Button onClick={handleAddItemToOrder} className="w-full" disabled={!selectedMenuItemId || menuOptions.length === 0}>
+                      <PlusCircle className="mr-2" /> Add Item to Current Selection
+                    </Button>
                   </CardContent>
-                  {(selectedTable && currentOrderItems.length > 0) && (
-                    <CardFooter className="flex flex-col gap-4 pt-4 border-t sm:flex-row">
-                      <Button onClick={handleSubmitOrder} className="flex-1" disabled={!canSubmitCurrentSelection}>
-                          <Send className="mr-2" /> Submit Selection to Kitchen
-                        </Button>
-                    </CardFooter>
-                  )}
                 </Card>
-                
-                <Card className="shadow-lg">
-                   <CardHeader>
-                    <CardTitle className="text-xl flex items-center justify-between">
-                      {selectedTable ? `Active Order for Table ${selectedTable}` : "Select Table to View Order"}
-                      {pendingOrderForSelectedTable?.status && (
-                        <Badge variant="outline" className={`${getStatusBadgeClass(pendingOrderForSelectedTable.status)} capitalize font-medium`}>
-                          {pendingOrderForSelectedTable.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
-                          {pendingOrderForSelectedTable.status.replace('_', ' ')}
-                        </Badge>
+
+                <div className="space-y-6">
+                  <Card className="shadow-lg">
+                    <CardHeader>
+                      <CardTitle className="text-xl">Current Items for Submission</CardTitle>
+                      <CardDescription>For Table {selectedTable} (Subtotal: ₹{calculateSubtotal(currentOrderItems).toFixed(2)})</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {currentOrderItems.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-4">No items in current selection for Table {selectedTable}.</p>
+                      ) : (
+                        <ul className="space-y-3 max-h-48 overflow-y-auto">
+                          {currentOrderItems.map(item => (
+                            <li key={item.id + Math.random()} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
+                              <div>
+                                <p className="font-medium">{item.name} <span className="text-sm text-muted-foreground"> (x{item.quantity})</span></p>
+                                <p className="text-sm text-primary">₹{(item.price * item.quantity).toFixed(2)}</p>
+                              </div>
+                              <Button variant="ghost" size="icon" onClick={() => handleRemoveItemFromCurrentSelection(item.id)}>
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
                       )}
-                    </CardTitle>
-                    {selectedTable && !pendingOrderForSelectedTable && <CardDescription>No active items for this table. Add and submit items above.</CardDescription>}
-                    {selectedTable && pendingOrderForSelectedTable && 
-                        <CardDescription>
-                            Total subtotal: ₹{calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}
-                        </CardDescription>
-                    }
-                  </CardHeader>
-                  <CardContent>
-                    {!selectedTable ? (
-                       <p className="text-muted-foreground text-center py-4">Select a table from the panel on the left to view its full active order details here.</p>
-                    ) : pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 ? (
-                      <ul className="space-y-2 max-h-60 overflow-y-auto">
-                        {pendingOrderForSelectedTable.items.map(item => (
-                          <li key={item.id} className="p-2 rounded-md bg-muted/30">
-                            <div className="flex justify-between items-center">
-                                <span>{item.name} (x{item.quantity})</span>
-                                <span>₹{(item.price * item.quantity).toFixed(2)}</span>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-muted-foreground text-center py-4">No items submitted to kitchen for Table {selectedTable} yet.</p>
+                    </CardContent>
+                    {currentOrderItems.length > 0 && (
+                      <CardFooter className="flex flex-col gap-4 pt-4 border-t sm:flex-row">
+                        <Button onClick={handleSubmitOrder} className="flex-1" disabled={!canSubmitCurrentSelection}>
+                            <Send className="mr-2" /> Submit Selection to Kitchen
+                          </Button>
+                      </CardFooter>
                     )}
-                  </CardContent>
-                  {selectedTable && pendingOrderForSelectedTable && canGenerateBillForSelectedTable && (
-                    <CardFooter>
-                       <Button onClick={handleGenerateBillRequest} className="w-full" variant="outline">
-                          <ReceiptText className="mr-2" /> Request Bill for Table {selectedTable}
-                        </Button>
-                    </CardFooter>
-                  )}
-                </Card>
+                  </Card>
+                  
+                  <Card className="shadow-lg">
+                    <CardHeader>
+                      <CardTitle className="text-xl flex items-center justify-between">
+                        Active Order for Table {selectedTable}
+                        {pendingOrderForSelectedTable?.status && (
+                          <Badge variant="outline" className={`${getStatusBadgeClass(pendingOrderForSelectedTable.status)} capitalize font-medium`}>
+                            {pendingOrderForSelectedTable.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
+                            {pendingOrderForSelectedTable.status.replace('_', ' ')}
+                          </Badge>
+                        )}
+                      </CardTitle>
+                      {pendingOrderForSelectedTable && 
+                          <CardDescription>
+                              Total subtotal: ₹{calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}
+                          </CardDescription>
+                      }
+                      {!pendingOrderForSelectedTable && <CardDescription>No items submitted for this table yet.</CardDescription>}
+                    </CardHeader>
+                    <CardContent>
+                      {pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 ? (
+                        <ul className="space-y-2 max-h-60 overflow-y-auto">
+                          {pendingOrderForSelectedTable.items.map(item => (
+                            <li key={item.id} className="p-2 rounded-md bg-muted/30">
+                              <div className="flex justify-between items-center">
+                                  <span>{item.name} (x{item.quantity})</span>
+                                  <span>₹{(item.price * item.quantity).toFixed(2)}</span>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-muted-foreground text-center py-4">No items submitted to kitchen for Table {selectedTable} yet.</p>
+                      )}
+                    </CardContent>
+                    {pendingOrderForSelectedTable && canRequestBillForSelectedTable && (
+                      <CardFooter>
+                        <Button onClick={handleRequestBillForSelectedTable} className="w-full" variant="outline">
+                            <ReceiptText className="mr-2" /> Request Bill for Table {selectedTable}
+                          </Button>
+                      </CardFooter>
+                    )}
+                  </Card>
+                </div>
               </div>
-            </div>
+            )}
+            {!selectedTable && (
+                 <Card className="shadow-lg">
+                    <CardContent className="text-center py-12">
+                         <Image src="https://placehold.co/400x250.png" alt="Restaurant tables illustration" width={200} height={125} className="mx-auto mb-4 rounded-lg opacity-70" data-ai-hint="restaurant tables" />
+                        <p className="text-muted-foreground">Please select a table from the grid above to manage its order.</p>
+                    </CardContent>
+                </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="allActiveOrders">
@@ -419,14 +471,14 @@ export default function WaiterPage() {
                 <CardDescription>Overview of all dine-in orders not yet paid. Refreshing for status updates.</CardDescription>
               </CardHeader>
               <CardContent>
-                {allUnbilledOrdersList.length === 0 ? (
+                {allUnbilledDineInOrdersList.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
                     <Image src="https://placehold.co/400x250.png" alt="Empty restaurant overview" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant empty tables"/>
                     <p>No active dine-in orders across any tables.</p>
                   </div>
                 ) : (
                   <ul className="space-y-4">
-                    {allUnbilledOrdersList.map(order => (
+                    {allUnbilledDineInOrdersList.map(order => (
                       <li key={order.id} className="p-4 rounded-lg border bg-card">
                         <div className="flex items-center justify-between mb-2">
                           <div>
@@ -493,3 +545,4 @@ export default function WaiterPage() {
     </div>
   );
 }
+
