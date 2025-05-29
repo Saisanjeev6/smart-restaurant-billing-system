@@ -13,12 +13,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { TAX_RATE } from '@/lib/constants';
-import type { Order, OrderItem, Bill, User } from '@/types';
+import type { Order, OrderItem, Bill, User, OrderStatus } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageUsersTool } from './components/ManageUsersTool';
 import { ManageMenuTool } from './components/ManageMenuTool';
-import { RestaurantSettingsTool } from './components/RestaurantSettingsTool'; // New import
-import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus, SettingsIcon } from 'lucide-react'; // Added SettingsIcon
+import { RestaurantSettingsTool } from './components/RestaurantSettingsTool';
+import { FileText, Percent, Sparkles, ListChecks, Users, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus, SettingsIcon, CookingPot } from 'lucide-react'; // Added CookingPot
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
 import { getMenuItems } from '@/lib/menuManager';
@@ -56,7 +56,6 @@ const MOCK_ORDERS_SEED: Order[] = [
     id: 'ORD-1006', tableNumber: 4, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
     status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
-  // Additional mock orders for better analytics data
   {
     id: 'ORD-1007', tableNumber: 7, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
     status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
@@ -88,7 +87,11 @@ const MOCK_ORDERS_SEED: Order[] = [
   {
     id: 'ORD-1012', tableNumber: 11, items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 1 }, { id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
     status: 'bill_requested', timestamp: new Date(Date.now() - 120000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  }
+  },
+  {
+    id: 'ORD-1013', tableNumber: 12, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1 }],
+    status: 'preparing', timestamp: new Date(Date.now() - 60000 * 5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+  },
 ];
 
 type AnalyticsPeriod = 'today' | 'week' | 'month' | '2months' | 'custom';
@@ -196,13 +199,14 @@ export default function AdminPage() {
       }
     } else if (selectedAnalyticsPeriod === 'custom') {
       periodLabelValue = 'Please select a start and end date for the custom range.';
-    } else if (startDate) {
+    } else if (startDate) { // For non-custom cases where endDate is derived or implicitly now
         periodLabelValue = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
          filteredOrders = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
           return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
     }
+
 
     const totalSales = filteredOrders.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
     const totalOrders = filteredOrders.length;
@@ -235,15 +239,17 @@ export default function AdminPage() {
 
     const chartDataPoints = [];
     const now = new Date();
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 5; i >= 0; i--) { // Iterate for the last 6 months (0 to 5 months ago)
       const targetMonthDate = subMonths(now, i);
       const monthYearStr = format(targetMonthDate, 'MMM yyyy');
       if (salesByMonth[monthYearStr]) {
         chartDataPoints.push(salesByMonth[monthYearStr]);
       } else {
+         // Add a data point with 0 sales if no sales for that month
          chartDataPoints.push({ month: monthYearStr, monthNumeric: getMonth(targetMonthDate), year: getYear(targetMonthDate), totalSales: 0 });
       }
     }
+    // Sort ensures that even if months are added out of order (e.g., by processing older data first), they appear correctly.
     return chartDataPoints.sort((a, b) => (a.year * 100 + a.monthNumeric) - (b.year * 100 + b.monthNumeric));
 
   }, [paidOrders, calculateOrderTotal]);
@@ -303,7 +309,7 @@ export default function AdminPage() {
   useEffect(() => {
     if(isMounted){
         loadAllOrders();
-        const intervalId = setInterval(loadAllOrders, 7000);
+        const intervalId = setInterval(loadAllOrders, 7000); // Poll every 7 seconds
         return () => clearInterval(intervalId);
     }
   }, [isMounted, loadAllOrders]);
@@ -319,11 +325,11 @@ export default function AdminPage() {
       subtotal,
       taxRate: TAX_RATE,
       taxAmount,
-      discountAmount: 0,
+      discountAmount: 0, // Reset discount when loading a new bill
       totalAmount,
-      paymentStatus: order.status === 'paid' ? 'paid' : 'pending',
+      paymentStatus: order.status === 'paid' ? 'paid' : 'pending', // Reflect actual order status
     });
-    setDiscountPercentage(0); 
+    setDiscountPercentage(0); // Reset discount percentage input
     toast({ title: 'Bill Loaded', description: `Bill for Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) is ready.` });
   };
 
@@ -344,14 +350,16 @@ export default function AdminPage() {
 
     let paymentFinalized = orderForBill.status === 'paid';
 
+    // If the order was 'bill_requested', finalize payment first
     if (orderForBill.status === 'bill_requested') {
-      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100;
+      const currentDiscount = (currentBill.subtotal * discountPercentage) / 100; // Use state for discount
       const finalTotal = currentBill.subtotal + currentBill.taxAmount - currentDiscount;
       
       const success = updateSharedOrderStatus(orderForBill.id, 'paid');
       if (success) {
+        // Update the local state for currentBill and orderForBill to reflect 'paid' status
         setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid', discountAmount: currentDiscount, totalAmount: finalTotal } : null);
-        setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null);
+        setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null); // Update local order copy
 
         toast({
           title: 'Bill Finalized',
@@ -360,33 +368,35 @@ export default function AdminPage() {
         paymentFinalized = true;
       } else {
         toast({ title: 'Error', description: `Failed to mark order ...${orderForBill.id.slice(-6)} as paid.`, variant: 'destructive' });
-        return; 
+        return; // Stop if payment finalization fails
       }
     }
 
+    // Proceed to print if payment is finalized (either initially 'paid' or just became 'paid')
     if (paymentFinalized) {
         window.print();
+        // Optionally clear the bill form after printing
         setTimeout(() => {
             setOrderForBill(null);
             setCurrentBill(null);
             setDiscountPercentage(0);
-            loadAllOrders(); 
-        }, 100);
-    } else if (orderForBill.status !== 'bill_requested' && orderForBill.status === 'paid') { 
+            loadAllOrders(); // Refresh the list of requests
+        }, 100); // Delay to allow print dialog to appear
+    } else if (orderForBill.status !== 'bill_requested' && orderForBill.status === 'paid') { // For reprinting an already paid bill (not via bill_requested)
         toast({ title: 'Printing Bill (Reprint)', description: 'Printing current bill details.' });
         window.print();
     }
   };
 
 
-  const getStatusBadgeClass = (status: Order['status']): string => {
+  const getStatusBadgeClass = (status: OrderStatus): string => {
     switch (status) {
       case 'pending': return 'bg-blue-100 text-blue-700 border-blue-300';
-      case 'preparing': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'preparing': return 'bg-yellow-100 text-yellow-700 border-yellow-300 animate-pulse';
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
-      case 'billed': return 'bg-gray-100 text-gray-700 border-gray-300'; 
+      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400'; 
       case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
@@ -413,13 +423,13 @@ export default function AdminPage() {
       <AppHeader title="Admin Dashboard" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-7"> {/* Updated grid-cols */}
+          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-7">
             <TabsTrigger value="orders" className="flex items-center gap-2"><ListChecks /> Active Orders</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText /> Bill Management</TabsTrigger>
             <TabsTrigger value="tips" className="flex items-center gap-2"><Sparkles /> AI Tip Suggester</TabsTrigger>
             <TabsTrigger value="users" className="flex items-center gap-2"><UserCog /> Manage Users</TabsTrigger>
             <TabsTrigger value="menu" className="flex items-center gap-2"><ListPlus /> Manage Menu</TabsTrigger>
-            <TabsTrigger value="settings" className="flex items-center gap-2"><SettingsIcon /> Restaurant Settings</TabsTrigger> {/* New Tab */}
+            <TabsTrigger value="settings" className="flex items-center gap-2"><SettingsIcon /> Restaurant Settings</TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2"><LineChart /> Sales Analytics</TabsTrigger>
           </TabsList>
 
@@ -462,6 +472,7 @@ export default function AdminPage() {
                         <TableCell>₹{calculateOrderTotal(order.items).toFixed(2)}</TableCell>
                         <TableCell>
                            <Badge variant="outline" className={`${getStatusBadgeClass(order.status)} capitalize font-medium`}>
+                            {order.status === 'preparing' && <CookingPot className="w-3 h-3 mr-1" />}
                             {order.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
                             {order.status.replace('_', ' ')}
                           </Badge>
@@ -536,6 +547,7 @@ export default function AdminPage() {
                     <Separator />
                     <div className="flex justify-between text-lg font-bold"><p>Total:</p><p>₹{currentBill.totalAmount.toFixed(2)}</p></div>
 
+                    {/* Discount input only if order status is 'bill_requested' and payment is 'pending' */}
                     {currentBill.paymentStatus === 'pending' && orderForBill.status === 'bill_requested' && (
                       <>
                         <Separator />
@@ -544,7 +556,9 @@ export default function AdminPage() {
                             <Label htmlFor="discount">Discount (%)</Label>
                             <Input id="discount" type="number" value={discountPercentage} onChange={e => setDiscountPercentage(parseFloat(e.target.value) || 0)} min="0" max="100" />
                           </div>
-                          <Button onClick={applyDiscount} variant="outline" disabled={currentBill.paymentStatus === 'paid'}><Percent className="mr-2 h-4 w-4" />Apply</Button>
+                          <Button onClick={applyDiscount} variant="outline" disabled={currentBill.paymentStatus === 'paid'}>
+                            <Percent className="mr-2 h-4 w-4" />Apply
+                          </Button>
                         </div>
                       </>
                     )}
@@ -553,14 +567,15 @@ export default function AdminPage() {
                      <Button 
                         onClick={handlePrintAdminBill} 
                         className="w-full" 
-                        variant="outline" 
+                        variant={orderForBill.status === 'bill_requested' ? 'default' : 'outline'}
                         size="lg" 
+                        // Disable if not a bill_requested or already paid order
                         disabled={!currentBill || (orderForBill.status !== 'bill_requested' && orderForBill.status !== 'paid')}
                       >
                         <Printer className="mr-2 h-4 w-4" /> 
                         {orderForBill.status === 'bill_requested' ? 'Finalize Payment & Print Bill' 
                           : orderForBill.status === 'paid' ? 'Print Bill (Reprint)' 
-                          : 'Print Bill'}
+                          : 'Print Bill' /* Fallback, should ideally not be hit in this flow */ }
                      </Button>
                   </CardFooter>
                 </Card>
@@ -584,7 +599,7 @@ export default function AdminPage() {
           <TabsContent value="menu">
             <ManageMenuTool />
           </TabsContent>
-          <TabsContent value="settings"> {/* New Tab Content */}
+          <TabsContent value="settings">
             <RestaurantSettingsTool />
           </TabsContent>
           <TabsContent value="analytics">
@@ -605,6 +620,11 @@ export default function AdminPage() {
                         size="sm"
                         onClick={() => {
                           setSelectedAnalyticsPeriod(period.value);
+                          // Reset custom dates if another period is chosen
+                          if (period.value !== 'custom') {
+                            setCustomStartDate(undefined);
+                            setCustomEndDate(undefined);
+                          }
                         }}
                       >
                         {period.label}
@@ -635,7 +655,7 @@ export default function AdminPage() {
                               selected={customStartDate}
                               onSelect={(date) => {
                                 setCustomStartDate(date);
-                                if (date && customEndDate && date > customEndDate) setCustomEndDate(undefined);
+                                if (date && customEndDate && date > customEndDate) setCustomEndDate(undefined); // Invalidate end date if start is after
                               }}
                               initialFocus
                             />
@@ -663,7 +683,7 @@ export default function AdminPage() {
                               mode="single"
                               selected={customEndDate}
                               onSelect={setCustomEndDate}
-                              disabled={(date) => (customStartDate && date < customStartDate) || date > new Date()}
+                              disabled={(date) => (customStartDate && date < customStartDate) || date > new Date()} // Disable future dates and dates before start
                               initialFocus
                             />
                           </PopoverContent>
@@ -713,7 +733,7 @@ export default function AdminPage() {
                           tickLine={false}
                           axisLine={false}
                           tickMargin={8}
-                          tickFormatter={(value) => value.slice(0, 3)}
+                          tickFormatter={(value) => value.slice(0, 3)} // Shorten month name e.g., "Jan"
                         />
                         <YAxis
                           tickFormatter={(value) => `₹${value}`}

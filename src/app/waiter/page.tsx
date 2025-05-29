@@ -9,13 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select'; // Added SelectGroup, SelectLabel
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getMenuItems } from '@/lib/menuManager';
 import { getTableNumbersArray } from '@/lib/restaurantSettings';
 import type { MenuItem as MenuItemType, Order, OrderItem, User, OrderStatus } from '@/types';
-import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon } from 'lucide-react';
+import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon, CookingPot } from 'lucide-react'; // Added CookingPot
 import Image from 'next/image';
 import {
   AlertDialog,
@@ -32,7 +32,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getSharedOrders, addOrUpdateSharedOrder, updateSharedOrderStatus } from '@/lib/orderManager';
 import { Badge } from '@/components/ui/badge';
 
-type TableDisplayStatus = 'vacant' | 'selected' | 'occupied_pending' | 'occupied_ready' | 'occupied_bill_requested';
+type TableDisplayStatus = 'vacant' | 'selected' | 'occupied_pending' | 'occupied_preparing' | 'occupied_ready' | 'occupied_bill_requested';
 
 
 export default function WaiterPage() {
@@ -123,7 +123,7 @@ export default function WaiterPage() {
 
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
 
-  const allUnbilledDineInOrdersList = useMemo(() => {
+  const allActiveDineInOrdersList = useMemo(() => {
     if (!isMounted) return [];
     return activeOrders
       .filter(order => order.type === 'dine-in' && order.status !== 'paid' && order.status !== 'cancelled' && order.status !== 'billed')
@@ -133,7 +133,7 @@ export default function WaiterPage() {
 
   const handleSelectTable = (tableNum: number) => {
     setSelectedTable(String(tableNum));
-    setCurrentOrderItems([]);
+    setCurrentOrderItems([]); // Clear any items from a previously selected table/new order form
   };
 
   const handleAddItemToOrder = () => {
@@ -197,6 +197,8 @@ export default function WaiterPage() {
       });
       orderToUpdate.items = Array.from(updatedItemsMap.values());
       orderToUpdate.timestamp = new Date().toISOString();
+      // If order was 'ready' or 'served', adding new items reverts it to 'pending' or 'preparing' as appropriate.
+      // For simplicity here, we'll set it to pending. Kitchen can then move to 'preparing'.
       orderToUpdate.status = 'pending';
 
 
@@ -218,6 +220,7 @@ export default function WaiterPage() {
     addOrUpdateSharedOrder(orderToUpdate);
     setCurrentOrderItems([]);
     loadActiveOrders();
+    // setSelectedTable(''); // Optionally clear selected table after submission
   };
 
   const handleRequestBillForSelectedTable = () => {
@@ -225,8 +228,8 @@ export default function WaiterPage() {
       toast({ title: 'Error', description: `No active order found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
       return;
     }
-    if (pendingOrderForSelectedTable.status === 'bill_requested') {
-        toast({ title: 'Info', description: `Bill already requested for Table ${selectedTable}. Admin is processing.`, variant: 'default' });
+    if (pendingOrderForSelectedTable.status === 'bill_requested' || pendingOrderForSelectedTable.status === 'billed' || pendingOrderForSelectedTable.status === 'paid') {
+        toast({ title: 'Info', description: `Bill already requested or processed for Table ${selectedTable}.`, variant: 'default' });
         return;
     }
     setOrderForBillConfirmation(pendingOrderForSelectedTable);
@@ -249,16 +252,16 @@ export default function WaiterPage() {
       toast({ title: 'Error', description: 'Failed to request bill.', variant: 'destructive' });
     }
 
-    setCurrentOrderItems([]);
+    setCurrentOrderItems([]); // Clear items in form
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
-    // setSelectedTable(''); // Clear selected table after billing
+    // setSelectedTable(''); // Clear selected table after billing to return to overview
   };
 
   const getStatusBadgeClass = (status: OrderStatus): string => {
     switch (status) {
       case 'pending': return 'bg-blue-100 text-blue-700 border-blue-300';
-      case 'preparing': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
+      case 'preparing': return 'bg-yellow-100 text-yellow-700 border-yellow-300 animate-pulse';
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
@@ -274,7 +277,8 @@ export default function WaiterPage() {
     if (!order) return 'vacant';
     if (order.status === 'bill_requested') return 'occupied_bill_requested';
     if (order.status === 'ready' || order.status === 'served') return 'occupied_ready';
-    return 'occupied_pending';
+    if (order.status === 'preparing') return 'occupied_preparing';
+    return 'occupied_pending'; // Covers 'pending'
   };
 
   const getTableStatusStyle = (status: TableDisplayStatus): string => {
@@ -282,6 +286,7 @@ export default function WaiterPage() {
       case 'vacant': return 'bg-card hover:bg-muted/50 text-card-foreground border-border';
       case 'selected': return 'bg-primary text-primary-foreground border-primary ring-2 ring-primary ring-offset-2';
       case 'occupied_pending': return 'bg-blue-100 hover:bg-blue-200 text-blue-700 border-blue-400';
+      case 'occupied_preparing': return 'bg-yellow-100 hover:bg-yellow-200 text-yellow-700 border-yellow-400 animate-pulse';
       case 'occupied_ready': return 'bg-green-100 hover:bg-green-200 text-green-700 border-green-400 animate-pulse';
       case 'occupied_bill_requested': return 'bg-orange-100 hover:bg-orange-200 text-orange-700 border-orange-400';
       default: return 'bg-card hover:bg-muted/50 border-border';
@@ -292,6 +297,7 @@ export default function WaiterPage() {
     switch (status) {
         case 'vacant': return <Coffee className="w-4 h-4 text-muted-foreground" />;
         case 'occupied_pending': return <Utensils className="w-4 h-4 text-blue-600" />;
+        case 'occupied_preparing': return <CookingPot className="w-4 h-4 text-yellow-600" />;
         case 'occupied_ready': return <BellRing className="w-4 h-4 text-green-600" />;
         case 'occupied_bill_requested': return <FileTextIcon className="w-4 h-4 text-orange-600" />;
         default: return null;
@@ -328,7 +334,7 @@ export default function WaiterPage() {
             <Card className="mb-6 shadow-lg">
               <CardHeader>
                 <CardTitle className="text-xl">Select a Table</CardTitle>
-                <CardDescription>Click on a table below to manage its order. Table count is ({tableNumbers.length}).</CardDescription>
+                <CardDescription>Click on a table below to manage its order. Table count is ({tableNumbers.length}). Refreshing for status updates.</CardDescription>
               </CardHeader>
               <CardContent>
                 {tableNumbers.length > 0 ? (
@@ -443,6 +449,7 @@ export default function WaiterPage() {
                         Active Order for Table {selectedTable}
                         {pendingOrderForSelectedTable?.status && (
                           <Badge variant="outline" className={`${getStatusBadgeClass(pendingOrderForSelectedTable.status)} capitalize font-medium`}>
+                            {pendingOrderForSelectedTable.status === 'preparing' && <CookingPot className="w-3 h-3 mr-1" />}
                             {pendingOrderForSelectedTable.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
                             {pendingOrderForSelectedTable.status.replace('_', ' ')}
                           </Badge>
@@ -459,7 +466,7 @@ export default function WaiterPage() {
                       {pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 ? (
                         <ul className="space-y-2 max-h-60 overflow-y-auto">
                           {pendingOrderForSelectedTable.items.map(item => (
-                            <li key={item.id} className="p-2 rounded-md bg-muted/30">
+                            <li key={item.id + Math.random()} className="p-2 rounded-md bg-muted/30">
                               <div className="flex justify-between items-center">
                                   <span>{item.name} (x{item.quantity})</span>
                                   <span>₹{(item.price * item.quantity).toFixed(2)}</span>
@@ -504,14 +511,14 @@ export default function WaiterPage() {
                 <CardDescription>Overview of all dine-in orders not yet paid or billed. Refreshing for status updates.</CardDescription>
               </CardHeader>
               <CardContent>
-                {allUnbilledDineInOrdersList.length === 0 ? (
+                {allActiveDineInOrdersList.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
                     <Image src="https://placehold.co/400x250.png" alt="Empty restaurant overview" width={200} height={125} className="mb-4 rounded-lg opacity-70" data-ai-hint="restaurant empty tables"/>
                     <p>No active dine-in orders across any tables.</p>
                   </div>
                 ) : (
                   <ul className="space-y-4">
-                    {allUnbilledDineInOrdersList.map(order => (
+                    {allActiveDineInOrdersList.map(order => (
                       <li key={order.id} className="p-4 rounded-lg border bg-card">
                         <div className="flex items-center justify-between mb-2">
                           <div>
@@ -519,6 +526,7 @@ export default function WaiterPage() {
                             <span className="ml-2 text-xs text-muted-foreground">(ID: ...{order.id.slice(-6)})</span>
                           </div>
                            <Badge variant="outline" className={`${getStatusBadgeClass(order.status)} capitalize font-medium`}>
+                            {order.status === 'preparing' && <CookingPot className="w-3 h-3 mr-1" />}
                             {order.status === 'ready' && <BellRing className="w-3 h-3 mr-1" />}
                             {order.status.replace('_', ' ')}
                           </Badge>
@@ -559,7 +567,7 @@ export default function WaiterPage() {
                   <p className="font-semibold">Items for Billing:</p>
                   <ul className="list-disc list-inside pl-4">
                       {orderForBillConfirmation.items.map(item => (
-                          <li key={item.id}>
+                          <li key={item.id + Math.random()}>
                               {item.name} (x{item.quantity}) - ₹{(item.price * item.quantity).toFixed(2)}
                           </li>
                       ))}
