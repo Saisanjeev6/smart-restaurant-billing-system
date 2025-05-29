@@ -18,12 +18,12 @@ import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageUsersTool } from './components/ManageUsersTool';
 import { ManageMenuTool } from './components/ManageMenuTool';
 import { RestaurantSettingsTool } from './components/RestaurantSettingsTool';
-import { FileText, Percent, Sparkles, ListChecks, CreditCard, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus, SettingsIcon, CookingPot, MessageSquare } from 'lucide-react';
+import { FileText, Percent, Sparkles, ListChecks, UserCog, LineChart, CalendarDays, DollarSign, ShoppingCart, Info, CalendarIcon, Utensils, Tag, BellRing, Printer, AlertTriangle, CheckCircle, ListPlus, SettingsIcon, CookingPot, MessageSquare, UserCheck, Clock } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
 import { getMenuItems } from '@/lib/menuManager';
 import { getSharedOrders, initializeSharedOrdersWithMockData, updateSharedOrderStatus } from '@/lib/orderManager';
-import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid } from 'date-fns';
+import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid, getHours, setHours } from 'date-fns';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -38,7 +38,7 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
   {
     id: 'ORD-1002', tableNumber: 5, items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }, { id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }, { id: '6', name: 'New York Cheesecake', price: 300, category: 'Dessert', quantity: 2 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' // Different waiter
   },
   {
     id: 'TAKE-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1, comment: "Extra cheese" }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
@@ -54,15 +54,15 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
    {
     id: 'ORD-1006', tableNumber: 4, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
-    status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
   },
   {
     id: 'ORD-1007', tableNumber: 7, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
-    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 3).setHours(14)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' // Specific hour
   },
    {
     id: 'ORD-1008', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }, { id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
-    tableNumber: 10, status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 2)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    tableNumber: 10, status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 10).setHours(19)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2' // older, specific hour
   },
   {
     id: 'ORD-1009', tableNumber: 2, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 1 }],
@@ -70,15 +70,15 @@ const MOCK_ORDERS_SEED: Order[] = [
   },
    {
     id: 'ORD-1010', tableNumber: 6, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 2 }],
-    status: 'paid', timestamp: new Date().toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'paid', timestamp: new Date(new Date(Date.now() - 86400000 * 0.2).setHours(20)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1' // recent, specific hour
   },
   {
     id: 'ORD-1011', tableNumber: 8, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Less salt" }],
-    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
+    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 3)).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
   },
   {
     id: 'TAKE-004', items: [{ id: '2', name: 'Classic Caesar Salad', price: 350, category: 'Appetizer', quantity: 2 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 2 }],
-    status: 'paid', timestamp: new Date(new Date().setMonth(new Date().getMonth() - 4)).toISOString(), type: 'takeaway'
+    status: 'paid', timestamp: new Date(new Date(new Date().setMonth(new Date().getMonth() - 4)).setHours(12)).toISOString(), type: 'takeaway'
   },
    {
     id: 'TAKE-005', items: [{ id: '4', name: 'Angus Steak Frites', price: 900, category: 'Main Course', quantity: 1 }],
@@ -96,12 +96,19 @@ const MOCK_ORDERS_SEED: Order[] = [
 
 type AnalyticsPeriod = 'today' | 'week' | 'month' | '2months' | 'custom';
 
-const chartConfig = {
+const salesSummaryChartConfig = {
   totalSales: {
     label: "Total Sales",
     color: "hsl(var(--primary))",
   },
 } satisfies ChartConfig;
+
+const peakTimeChartConfig = {
+  orders: {
+    label: "Orders",
+    color: "hsl(var(--chart-2))",
+  },
+} satisfies ChartConfig
 
 
 export default function AdminPage() {
@@ -184,14 +191,14 @@ export default function AdminPage() {
         startDate = startOfMonth(now);
     }
 
-    let filteredOrders: Order[] = [];
+    let filteredOrdersForPeriod: Order[] = [];
     let periodLabelValue = 'Loading...';
 
     if (startDate && endDate) {
       if (startDate > endDate) {
         periodLabelValue = 'Invalid custom range';
       } else {
-        filteredOrders = paidOrders.filter(order => {
+        filteredOrdersForPeriod = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
           return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
@@ -201,22 +208,22 @@ export default function AdminPage() {
       periodLabelValue = 'Please select a start and end date for the custom range.';
     } else if (startDate) { 
         periodLabelValue = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
-         filteredOrders = paidOrders.filter(order => {
+         filteredOrdersForPeriod = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
           return isValid(orderDate) && isWithinInterval(orderDate, { start: startDate as Date, end: endDate as Date});
         });
     }
 
-
-    const totalSales = filteredOrders.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
-    const totalOrders = filteredOrders.length;
+    const totalSales = filteredOrdersForPeriod.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
+    const totalOrders = filteredOrdersForPeriod.length;
     const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
     return {
       totalSales,
       totalOrders,
       averageOrderValue,
-      periodLabel: periodLabelValue
+      periodLabel: periodLabelValue,
+      filteredOrders: filteredOrdersForPeriod,
     };
   }, [paidOrders, selectedAnalyticsPeriod, customStartDate, customEndDate, formatPeriodLabel, calculateOrderTotal]);
 
@@ -259,6 +266,57 @@ export default function AdminPage() {
     }
     return '';
   }, [orderForBill, currentBill]);
+
+    // --- New Detailed Analytics ---
+    const salesByMenuItem = useMemo(() => {
+        if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
+        const itemSales: Record<string, { name: string; quantitySold: number; totalSales: number; category: string }> = {};
+    
+        analyticsData.filteredOrders.forEach(order => {
+          order.items.forEach(item => {
+            if (!itemSales[item.id]) {
+              itemSales[item.id] = { name: item.name, quantitySold: 0, totalSales: 0, category: item.category };
+            }
+            itemSales[item.id].quantitySold += item.quantity;
+            itemSales[item.id].totalSales += item.price * item.quantity;
+          });
+        });
+        return Object.values(itemSales).sort((a,b) => b.totalSales - a.totalSales);
+      }, [analyticsData.filteredOrders]);
+    
+      const salesByWaiter = useMemo(() => {
+        if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
+        const waiterSales: Record<string, { waiterUsername: string; ordersTaken: number; totalSales: number }> = {};
+    
+        analyticsData.filteredOrders.forEach(order => {
+          if (order.type === 'dine-in' && order.waiterUsername) {
+            if (!waiterSales[order.waiterUsername]) {
+              waiterSales[order.waiterUsername] = { waiterUsername: order.waiterUsername, ordersTaken: 0, totalSales: 0 };
+            }
+            waiterSales[order.waiterUsername].ordersTaken += 1;
+            waiterSales[order.waiterUsername].totalSales += calculateOrderTotal(order.items);
+          }
+        });
+        return Object.values(waiterSales).sort((a,b) => b.totalSales - a.totalSales);
+      }, [analyticsData.filteredOrders, calculateOrderTotal]);
+    
+      const peakOrderTimesData = useMemo(() => {
+        if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
+        const hourlyOrders = Array(24).fill(null).map((_, i) => ({ hour: i, orders: 0 }));
+    
+        analyticsData.filteredOrders.forEach(order => {
+          const orderDate = parseISO(order.timestamp);
+          if (isValid(orderDate)) {
+            const hour = getHours(orderDate);
+            hourlyOrders[hour].orders += 1;
+          }
+        });
+    
+        return hourlyOrders.map(h => ({
+          hourLabel: `${String(h.hour).padStart(2, '0')}:00`,
+          orders: h.orders,
+        }));
+      }, [analyticsData.filteredOrders]);
 
   const loadAllOrders = useCallback(() => {
     if(!isMounted) return;
@@ -714,11 +772,103 @@ export default function AdminPage() {
                 </div>
 
                 <Separator />
+                {/* Sales by Menu Item Section */}
+                <Card className="shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg"><Tag className="text-primary" /> Sales by Menu Item</CardTitle>
+                    <CardDescription>Breakdown of sales per menu item for the selected period.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {salesByMenuItem.length > 0 ? (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Item Name</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead className="text-right">Qty Sold</TableHead>
+                            <TableHead className="text-right">Total Sales (₹)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {salesByMenuItem.map(item => (
+                            <TableRow key={item.name}>
+                              <TableCell className="font-medium">{item.name}</TableCell>
+                              <TableCell>{item.category}</TableCell>
+                              <TableCell className="text-right">{item.quantitySold}</TableCell>
+                              <TableCell className="text-right">₹{item.totalSales.toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center text-muted-foreground">No sales data for menu items in this period.</p>
+                    )}
+                  </CardContent>
+                </Card>
+                
+                <Separator />
+                {/* Sales by Waiter Section */}
+                <Card className="shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg"><UserCheck className="text-primary" /> Sales by Waiter</CardTitle>
+                    <CardDescription>Performance of each waiter for dine-in orders in the selected period.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {salesByWaiter.length > 0 ? (
+                       <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Waiter</TableHead>
+                            <TableHead className="text-right">Orders Taken</TableHead>
+                            <TableHead className="text-right">Total Sales (₹)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {salesByWaiter.map(waiter => (
+                            <TableRow key={waiter.waiterUsername}>
+                              <TableCell className="font-medium">{waiter.waiterUsername}</TableCell>
+                              <TableCell className="text-right">{waiter.ordersTaken}</TableCell>
+                              <TableCell className="text-right">₹{waiter.totalSales.toFixed(2)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    ) : (
+                      <p className="text-center text-muted-foreground">No sales data by waiter in this period.</p>
+                    )}
+                  </CardContent>
+                </Card>
 
+                <Separator />
+                {/* Peak Order Times Section */}
+                <Card className="shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg"><Clock className="text-primary" /> Peak Order Times</CardTitle>
+                    <CardDescription>Number of orders placed per hour during the selected period.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {peakOrderTimesData.some(h => h.orders > 0) ? (
+                      <ChartContainer config={peakTimeChartConfig} className="h-[300px] w-full">
+                        <BarChart accessibilityLayer data={peakOrderTimesData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                          <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                          <XAxis dataKey="hourLabel" tickLine={false} axisLine={false} tickMargin={8} />
+                          <YAxis tickFormatter={(value) => String(value)} allowDecimals={false} tickLine={false} axisLine={false} tickMargin={8} />
+                          <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                          <Legend />
+                          <Bar dataKey="orders" fill="var(--color-orders)" radius={4} />
+                        </BarChart>
+                      </ChartContainer>
+                    ) : (
+                      <p className="text-center text-muted-foreground">No order time data available for this period.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Separator />
                 <div>
-                  <h3 className="mb-4 text-lg font-semibold">Monthly Sales Overview (Last 6 Months)</h3>
+                  <h3 className="mb-4 text-lg font-semibold flex items-center gap-2"><CalendarDays className="text-primary" />Monthly Sales Overview (All Time - Last 6 Months)</h3>
                   {monthlyChartData.length > 0 ? (
-                     <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                     <ChartContainer config={salesSummaryChartConfig} className="h-[300px] w-full">
                       <BarChart accessibilityLayer data={monthlyChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
                         <CartesianGrid vertical={false} strokeDasharray="3 3" />
                         <XAxis
@@ -757,3 +907,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
