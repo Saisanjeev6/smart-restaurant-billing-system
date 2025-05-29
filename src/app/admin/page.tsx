@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { getTaxRate } from '@/lib/restaurantSettings'; // Import getTaxRate
+import { getTaxRate } from '@/lib/restaurantSettings';
 import type { Order, OrderItem, Bill, User, OrderStatus, MenuItem as MenuItemType } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageUsersTool } from './components/ManageUsersTool';
@@ -22,7 +22,7 @@ import { FileText, Percent, Sparkles, ListChecks, UserCog, LineChart, CalendarDa
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
 import { getMenuItems } from '@/lib/menuManager';
-import { getSharedOrders, initializeSharedOrdersWithMockData, updateSharedOrderStatus } from '@/lib/orderManager';
+import { getSharedOrders, initializeSharedOrdersWithMockData, updateSharedOrderStatus, getSharedOrderById } from '@/lib/orderManager';
 import { subDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, format, isWithinInterval, parseISO, getMonth, getYear, subMonths, startOfDay, endOfDay, isValid, getHours, setHours } from 'date-fns';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent, ChartConfig } from "@/components/ui/chart"
@@ -34,13 +34,8 @@ import { Badge } from '@/components/ui/badge';
 const MOCK_ORDERS_SEED: Order[] = [
   {
     id: 'ORD-MR-FIX-001', tableNumber: 1, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Ensure hot" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), 
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
     type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
-  },
-  {
-    id: 'ORD-MR-FIX-002', tableNumber: 2, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Extra mushrooms if possible" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), 
-    type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
   },
   {
     id: 'ORD-CPC-FIX-001', tableNumber: 3, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }],
@@ -48,8 +43,8 @@ const MOCK_ORDERS_SEED: Order[] = [
     type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
   {
-    id: 'ORD-MP-FIX-001', tableNumber: 4, items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), 
+    id: 'ORD-MP-FIX-001', items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }],
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(),
     type: 'takeaway'
   },
   {
@@ -106,9 +101,8 @@ export default function AdminPage() {
   const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
   const [taxRate, setTaxRate] = useState(0.08);
 
-
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
-    if (menuOptions.length === 0) { 
+    if (menuOptions.length === 0) {
         return items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
     }
     return items.reduce((sum, item) => {
@@ -144,7 +138,7 @@ export default function AdminPage() {
   }, []);
 
   const paidOrders = useMemo(() => allOrders.filter(order => order.status === 'paid'), [allOrders]);
-  
+
   const activeOrdersList = useMemo(() => {
       return allOrders
         .filter(order => order.status !== 'paid' && order.status !== 'cancelled')
@@ -193,7 +187,7 @@ export default function AdminPage() {
       }
     } else if (selectedAnalyticsPeriod === 'custom') {
       periodLabelValue = 'Please select a start and end date for the custom range.';
-    } else if (startDate) { 
+    } else if (startDate) {
         periodLabelValue = formatPeriodLabel(selectedAnalyticsPeriod, startDate, endDate);
          filteredOrdersForPeriod = paidOrders.filter(order => {
           const orderDate = parseISO(order.timestamp);
@@ -262,7 +256,7 @@ export default function AdminPage() {
       order.items.forEach(item => {
         const currentMenuItem = menuOptions.find(menuItem => menuItem.id === item.id);
         const priceToUse = currentMenuItem ? currentMenuItem.price : Number(item.price) || 0;
-        
+
         if (item.name === 'Mushroom Risotto' || item.name === 'Creamy Pasta Carbonara' || item.name === 'Margherita Pizza') {
              console.log(
                 `DEBUG salesByMenuItem: Processing ${item.name}. Order Item Price: ${item.price}, Current Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}, Qty: ${item.quantity}, Order ID: ${order.id}`
@@ -319,7 +313,7 @@ export default function AdminPage() {
     if(!isMounted) return;
     const ordersFromStorage = getSharedOrders();
     setAllOrders(ordersFromStorage);
-    setTaxRate(getTaxRate()); // Load tax rate
+    setTaxRate(getTaxRate());
 
     const currentBillRequests = ordersFromStorage.filter(
         order => order.status === 'bill_requested' && order.type === 'dine-in'
@@ -336,7 +330,7 @@ export default function AdminPage() {
         newUnseenRequests.forEach(order => {
             toast({
                 title: 'Bill Requested',
-                description: `Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) requests billing.`,
+                description: `Table ${order.tableNumber} (Order ...${order.id.slice(-6)}) requests billing. Go to Bill Management.`,
                 duration: 10000,
                  variant: 'default'
             });
@@ -354,7 +348,7 @@ export default function AdminPage() {
     } else {
       setCurrentUser(user);
       initializeSharedOrdersWithMockData(MOCK_ORDERS_SEED);
-      setMenuOptions(getMenuItems()); 
+      setMenuOptions(getMenuItems());
       setIsMounted(true);
     }
   }, [router]);
@@ -376,7 +370,7 @@ export default function AdminPage() {
     });
 
     const subtotal = itemsForBill.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
-    const currentTaxRate = getTaxRate(); // Use dynamic tax rate
+    const currentTaxRate = getTaxRate();
     const taxAmount = subtotal * currentTaxRate;
     const totalAmount = subtotal + taxAmount;
 
@@ -408,38 +402,36 @@ export default function AdminPage() {
       return;
     }
 
-    let paymentFinalized = orderForBill.status === 'paid';
+    let orderIsNowPaid = orderForBill.status === 'paid';
 
     if (orderForBill.status === 'bill_requested') {
-      const finalTotal = currentBill.totalAmount; 
-      
       const success = updateSharedOrderStatus(orderForBill.id, 'paid');
       if (success) {
-        setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid', totalAmount: finalTotal } : null);
+        // currentBill already has discount applied if any, so its totalAmount is correct
+        setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid' } : null);
         setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null);
-
         toast({
           title: 'Bill Finalized',
-          description: `Order ...${orderForBill.id.slice(-6)} marked as paid. Printing bill...`,
+          description: `Order ...${orderForBill.id.slice(-6)} marked as paid. Preparing to print...`,
         });
-        paymentFinalized = true;
+        orderIsNowPaid = true;
       } else {
-        toast({ title: 'Error', description: `Failed to mark order ...${orderForBill.id.slice(-6)} as paid.`, variant: 'destructive' });
+        toast({ title: 'Error', description: `Failed to mark order ...${orderForBill.id.slice(-6)} as paid. Print cancelled.`, variant: 'destructive' });
         return;
       }
     }
 
-    if (paymentFinalized) {
-        window.print();
-        setTimeout(() => {
-            setOrderForBill(null);
-            setCurrentBill(null);
-            setDiscountPercentage(0);
-            loadAllOrdersAndSettings();
-        }, 100);
-    } else if (orderForBill.status === 'paid') { 
-        toast({ title: 'Printing Bill (Reprint)', description: 'Printing current bill details.' });
-        window.print();
+    if (orderIsNowPaid) { // This covers orders that just became 'paid' or were already 'paid'
+      console.log("Admin: Attempting to print bill...");
+      window.print();
+      setTimeout(() => {
+        setOrderForBill(null);
+        setCurrentBill(null);
+        setDiscountPercentage(0);
+        loadAllOrdersAndSettings();
+      }, 200);
+    } else {
+      toast({ title: 'Action Needed', description: `Order status is "${orderForBill.status}". Finalize payment to print.`, variant: 'default'});
     }
   };
 
@@ -908,3 +900,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
