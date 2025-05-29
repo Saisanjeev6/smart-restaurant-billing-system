@@ -12,7 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { TAX_RATE } from '@/lib/constants';
+import { getTaxRate } from '@/lib/restaurantSettings'; // Import getTaxRate
 import type { Order, OrderItem, Bill, User, OrderStatus, MenuItem as MenuItemType } from '@/types';
 import { TipSuggestionTool } from './components/TipSuggestionTool';
 import { ManageUsersTool } from './components/ManageUsersTool';
@@ -31,35 +31,27 @@ import { Calendar } from "@/components/ui/calendar"
 import { cn } from "@/lib/utils"
 import { Badge } from '@/components/ui/badge';
 
-// MOCK_ORDERS_SEED specifically for debugging analytics.
-// Prices for Mushroom Risotto, Carbonara, Pizza are intentionally set high and correct here.
-// USER: YOU MUST CLEAR localStorage 'restaurant_shared_orders_v1' for this to take effect.
 const MOCK_ORDERS_SEED: Order[] = [
-  // Paid Mushroom Risotto order 1
   {
     id: 'ORD-MR-FIX-001', tableNumber: 1, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Ensure hot" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), // 2 days ago
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), 
     type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
-  // Paid Mushroom Risotto order 2
   {
     id: 'ORD-MR-FIX-002', tableNumber: 2, items: [{ id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course', quantity: 1, comment: "Extra mushrooms if possible" }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), // 1 day ago
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1).toISOString(), 
     type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
   },
-  // Paid Creamy Pasta Carbonara
   {
     id: 'ORD-CPC-FIX-001', tableNumber: 3, items: [{ id: '5', name: 'Creamy Pasta Carbonara', price: 450, category: 'Main Course', quantity: 1 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString(), // 1.5 days ago
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 1.5).toISOString(),
     type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
   },
-  // Paid Margherita Pizza
   {
     id: 'ORD-MP-FIX-001', tableNumber: 4, items: [{ id: '9', name: 'Margherita Pizza', price: 400, category: 'Main Course', quantity: 1 }],
-    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), // 0.5 days ago
+    status: 'paid', timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), 
     type: 'takeaway'
   },
-  // Other orders for context, ensure their prices are also reasonable
   {
     id: 'ORD-OTHER-001', tableNumber: 5, items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }],
     status: 'paid', timestamp: new Date(Date.now() - 3600000 * 5).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-001', waiterUsername: 'waiter1'
@@ -67,6 +59,14 @@ const MOCK_ORDERS_SEED: Order[] = [
   {
     id: 'ORD-ACTIVE-001', tableNumber: 6, items: [{ id: '3', name: 'Grilled Salmon Fillet', price: 750, category: 'Main Course', quantity: 1 }],
     status: 'bill_requested', timestamp: new Date(Date.now() - 360000).toISOString(), type: 'dine-in', waiterId: 'user-waiter-default-002', waiterUsername: 'waiter2'
+  },
+   {
+    id: 'TAKE-001', items: [{ id: '8', name: 'Artisan Latte', price: 180, category: 'Drink', quantity: 1 }, { id: '7', name: 'Freshly Brewed Iced Tea', price: 120, category: 'Drink', quantity: 1 }],
+    status: 'pending', timestamp: new Date(Date.now() - 180000).toISOString(), type: 'takeaway'
+  },
+  {
+    id: 'TAKE-002', items: [{ id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer', quantity: 2 }],
+    status: 'ready', timestamp: new Date(Date.now() - 300000).toISOString(), type: 'takeaway'
   },
 ];
 
@@ -104,20 +104,19 @@ export default function AdminPage() {
   const [customEndDate, setCustomEndDate] = useState<Date | undefined>(undefined);
   const [billRequests, setBillRequests] = useState<Order[]>([]);
   const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
+  const [taxRate, setTaxRate] = useState(0.08);
 
 
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
-    if (menuOptions.length === 0) { // If menu options not loaded yet, use stored item prices
+    if (menuOptions.length === 0) { 
         return items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
     }
-    // Use current menu prices for calculation
     return items.reduce((sum, item) => {
         const currentMenuItem = menuOptions.find(mi => mi.id === item.id);
         const priceToUse = currentMenuItem ? currentMenuItem.price : Number(item.price) || 0;
         return sum + (priceToUse * (Number(item.quantity) || 0));
     }, 0);
   }, [menuOptions]);
-
 
   const formatPeriodLabel = useCallback((period: AnalyticsPeriod, start?: Date, end?: Date): string => {
     if (!start || !end && period === 'custom') return 'Custom range not set';
@@ -145,7 +144,7 @@ export default function AdminPage() {
   }, []);
 
   const paidOrders = useMemo(() => allOrders.filter(order => order.status === 'paid'), [allOrders]);
-
+  
   const activeOrdersList = useMemo(() => {
       return allOrders
         .filter(order => order.status !== 'paid' && order.status !== 'cancelled')
@@ -202,7 +201,6 @@ export default function AdminPage() {
         });
     }
 
-
     const totalSales = filteredOrdersForPeriod.reduce((sum, order) => sum + calculateOrderTotal(order.items), 0);
     const totalOrders = filteredOrdersForPeriod.length;
     const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
@@ -251,10 +249,10 @@ export default function AdminPage() {
   const orderDetailsForTipTool = useMemo(() => {
     if (orderForBill && currentBill) {
       const itemsSummary = orderForBill.items.map(item => `${item.name} (x${item.quantity})`).join(', ');
-      return `Items: ${itemsSummary}. Subtotal: ₹${currentBill.subtotal.toFixed(2)}. Tax: ₹${currentBill.taxAmount.toFixed(2)}. Total: ₹${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
+      return `Items: ${itemsSummary}. Subtotal: ₹${currentBill.subtotal.toFixed(2)}. Tax (${(taxRate * 100).toFixed(0)}%): ₹${currentBill.taxAmount.toFixed(2)}. Total: ₹${currentBill.totalAmount.toFixed(2)}. Table: ${orderForBill.tableNumber}.`;
     }
     return '';
-  }, [orderForBill, currentBill]);
+  }, [orderForBill, currentBill, taxRate]);
 
   const salesByMenuItem = useMemo(() => {
     if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0 || menuOptions.length === 0) return [];
@@ -263,10 +261,8 @@ export default function AdminPage() {
     analyticsData.filteredOrders.forEach(order => {
       order.items.forEach(item => {
         const currentMenuItem = menuOptions.find(menuItem => menuItem.id === item.id);
-        // Use current menu price for analytics calculation, fallback to item's stored price if not found (e.g. item deleted from menu)
         const priceToUse = currentMenuItem ? currentMenuItem.price : Number(item.price) || 0;
         
-        // DEBUGGING LINE:
         if (item.name === 'Mushroom Risotto' || item.name === 'Creamy Pasta Carbonara' || item.name === 'Margherita Pizza') {
              console.log(
                 `DEBUG salesByMenuItem: Processing ${item.name}. Order Item Price: ${item.price}, Current Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}, Qty: ${item.quantity}, Order ID: ${order.id}`
@@ -278,11 +274,11 @@ export default function AdminPage() {
         }
         const quantity = Number(item.quantity) || 0;
         itemSales[item.id].quantitySold += quantity;
-        itemSales[item.id].totalSales += priceToUse * quantity; // Use priceToUse
+        itemSales[item.id].totalSales += priceToUse * quantity;
       });
     });
     return Object.values(itemSales).sort((a,b) => b.totalSales - a.totalSales);
-  }, [analyticsData.filteredOrders, menuOptions]); // Added menuOptions dependency
+  }, [analyticsData.filteredOrders, menuOptions]);
 
   const salesByWaiter = useMemo(() => {
     if (!analyticsData.filteredOrders || analyticsData.filteredOrders.length === 0) return [];
@@ -319,10 +315,11 @@ export default function AdminPage() {
   }, [analyticsData.filteredOrders]);
 
 
-  const loadAllOrders = useCallback(() => {
+  const loadAllOrdersAndSettings = useCallback(() => {
     if(!isMounted) return;
     const ordersFromStorage = getSharedOrders();
     setAllOrders(ordersFromStorage);
+    setTaxRate(getTaxRate()); // Load tax rate
 
     const currentBillRequests = ordersFromStorage.filter(
         order => order.status === 'bill_requested' && order.type === 'dine-in'
@@ -364,29 +361,29 @@ export default function AdminPage() {
 
   useEffect(() => {
     if(isMounted){
-        loadAllOrders();
-        const intervalId = setInterval(loadAllOrders, 7000);
+        loadAllOrdersAndSettings();
+        const intervalId = setInterval(loadAllOrdersAndSettings, 7000);
         return () => clearInterval(intervalId);
     }
-  }, [isMounted, loadAllOrders]);
+  }, [isMounted, loadAllOrdersAndSettings]);
 
 
   const handleSelectBillRequest = (order: Order) => {
     setOrderForBill(order);
-    // Calculate bill using current menu prices if possible for consistency
     const itemsForBill = order.items.map(item => {
         const menuItemDetails = menuOptions.find(mi => mi.id === item.id);
         return menuItemDetails ? { ...item, price: menuItemDetails.price, name: menuItemDetails.name, category: menuItemDetails.category } : item;
     });
 
     const subtotal = itemsForBill.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
-    const taxAmount = subtotal * TAX_RATE;
+    const currentTaxRate = getTaxRate(); // Use dynamic tax rate
+    const taxAmount = subtotal * currentTaxRate;
     const totalAmount = subtotal + taxAmount;
 
     setCurrentBill({
       orderId: order.id,
       subtotal,
-      taxRate: TAX_RATE,
+      taxRate: currentTaxRate,
       taxAmount,
       discountAmount: 0,
       totalAmount,
@@ -414,8 +411,7 @@ export default function AdminPage() {
     let paymentFinalized = orderForBill.status === 'paid';
 
     if (orderForBill.status === 'bill_requested') {
-      // Use prices from currentBill for final calculation as they might include discounts
-      const finalTotal = currentBill.totalAmount; // This already accounts for discount
+      const finalTotal = currentBill.totalAmount; 
       
       const success = updateSharedOrderStatus(orderForBill.id, 'paid');
       if (success) {
@@ -439,9 +435,9 @@ export default function AdminPage() {
             setOrderForBill(null);
             setCurrentBill(null);
             setDiscountPercentage(0);
-            loadAllOrders();
+            loadAllOrdersAndSettings();
         }, 100);
-    } else if (orderForBill.status === 'paid') { // Allow re-printing paid bills
+    } else if (orderForBill.status === 'paid') { 
         toast({ title: 'Printing Bill (Reprint)', description: 'Printing current bill details.' });
         window.print();
     }
@@ -482,7 +478,7 @@ export default function AdminPage() {
       <AppHeader title="Admin Dashboard" />
       <main className="flex-grow p-4 md:p-6 lg:p-8">
         <Tabs defaultValue="orders" className="w-full">
-          <TabsList className="grid w-full grid-cols-1 mb-6 md:grid-cols-7">
+          <TabsList className="grid w-full grid-cols-1 mb-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7">
             <TabsTrigger value="orders" className="flex items-center gap-2"><ListChecks /> Active Orders</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText /> Bill Management</TabsTrigger>
             <TabsTrigger value="tips" className="flex items-center gap-2"><Sparkles /> AI Tip Suggester</TabsTrigger>
@@ -602,7 +598,7 @@ export default function AdminPage() {
                     </ul>
                     <Separator />
                     <div className="flex justify-between text-sm"><p>Subtotal:</p><p>₹{currentBill.subtotal.toFixed(2)}</p></div>
-                    <div className="flex justify-between text-sm"><p>Tax ({TAX_RATE * 100}%):</p><p>₹{currentBill.taxAmount.toFixed(2)}</p></div>
+                    <div className="flex justify-between text-sm"><p>Tax ({(taxRate * 100).toFixed(1)}%):</p><p>₹{currentBill.taxAmount.toFixed(2)}</p></div>
                     {currentBill.discountAmount > 0 && (
                       <div className="flex justify-between text-sm text-destructive"><p>Discount:</p><p>-₹{currentBill.discountAmount.toFixed(2)}</p></div>
                     )}
@@ -780,7 +776,6 @@ export default function AdminPage() {
                 </div>
 
                 <Separator />
-                {/* Sales by Menu Item Section */}
                 <Card className="shadow-sm">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg"><Tag className="text-primary" /> Sales by Menu Item</CardTitle>
@@ -815,7 +810,6 @@ export default function AdminPage() {
                 </Card>
 
                 <Separator />
-                {/* Sales by Waiter Section */}
                 <Card className="shadow-sm">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg"><UserCheck className="text-primary" /> Sales by Waiter</CardTitle>
@@ -848,7 +842,6 @@ export default function AdminPage() {
                 </Card>
 
                 <Separator />
-                {/* Peak Order Times Section */}
                 <Card className="shadow-sm">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-lg"><Clock className="text-primary" /> Peak Order Times</CardTitle>

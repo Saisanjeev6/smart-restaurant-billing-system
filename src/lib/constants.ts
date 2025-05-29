@@ -1,7 +1,7 @@
 
 import type { MenuItem } from '@/types';
 
-// This MENU_ITEMS array will now serve as the INITIAL DEFAULT for the menuManager
+// This INITIAL_MENU_ITEMS array will now serve as the INITIAL DEFAULT for the menuManager
 // if localStorage is empty. Prices updated to reflect INR.
 export const INITIAL_MENU_ITEMS: MenuItem[] = [
   { id: '1', name: 'Crispy Spring Rolls', price: 250, category: 'Appetizer' },
@@ -16,6 +16,4 @@ export const INITIAL_MENU_ITEMS: MenuItem[] = [
   { id: '10', name: 'Mushroom Risotto', price: 550, category: 'Main Course' },
 ];
 
-// TABLE_NUMBERS is removed from here as it's now dynamic via restaurantSettings.ts
-
-export const TAX_RATE = 0.08; // 8% sales tax (can be adjusted as needed)
+// TAX_RATE is removed from here as it's now dynamic via restaurantSettings.ts

@@ -12,9 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { TAX_RATE } from '@/lib/constants';
-import { getMenuItems } from '@/lib/menuManager'; // Use dynamic menu items
-import type { MenuItem as MenuItemType, Order, OrderItem, Bill, User } from '@/types'; // Renamed MenuItem
+import { getTaxRate } from '@/lib/restaurantSettings'; // Import getTaxRate
+import { getMenuItems } from '@/lib/menuManager';
+import type { MenuItem as MenuItemType, Order, OrderItem, Bill, User } from '@/types';
 import { PlusCircle, Trash2, ShoppingBag, CreditCard, ReceiptText, Printer, RotateCcw, Sparkles, Ticket } from 'lucide-react';
 import Image from 'next/image';
 import { getCurrentUser } from '@/lib/auth';
@@ -33,11 +33,14 @@ export default function TakeawayPage() {
 
   const { toast } = useToast();
   const [isMounted, setIsMounted] = useState(false);
-  const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]); // For dynamic menu
+  const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
+  const [taxRate, setTaxRate] = useState(0.08);
+
 
   useEffect(() => {
     if (isMounted) {
       setMenuOptions(getMenuItems());
+      setTaxRate(getTaxRate()); // Load tax rate
     }
   }, [isMounted]);
 
@@ -56,7 +59,6 @@ export default function TakeawayPage() {
       const freshOrder = getSharedOrderById(activeOrder.id);
       if (freshOrder) {
         setActiveOrder(freshOrder);
-         // Ensure items in activeOrder reflect current menu prices if they changed
         const updatedItems = freshOrder.items.map(item => {
             const menuItemDetails = menuOptions.find(mi => mi.id === item.id);
             return menuItemDetails ? { ...item, price: menuItemDetails.price, name: menuItemDetails.name, category: menuItemDetails.category } : item;
@@ -64,24 +66,24 @@ export default function TakeawayPage() {
         const potentiallyUpdatedOrder = {...freshOrder, items: updatedItems};
         setActiveOrder(potentiallyUpdatedOrder);
 
-
-        if (freshOrder.status === 'pending' || freshOrder.status === 'billed' || freshOrder.status === 'paid') { 
+        if (freshOrder.status === 'pending' || freshOrder.status === 'paid') { 
           const subtotal = calculateSubtotal(potentiallyUpdatedOrder.items);
-          const taxAmount = subtotal * TAX_RATE;
+          const currentTaxRate = getTaxRate(); // Use dynamic tax rate
+          const taxAmount = subtotal * currentTaxRate;
           const totalAmount = subtotal + taxAmount;
           setCurrentBill({
             orderId: freshOrder.id,
             subtotal,
-            taxRate: TAX_RATE,
+            taxRate: currentTaxRate,
             taxAmount,
             discountAmount: 0, 
             totalAmount,
-            paymentStatus: (freshOrder.status === 'billed' || freshOrder.status === 'paid') ? 'paid' : 'pending',
+            paymentStatus: freshOrder.status === 'paid' ? 'paid' : 'pending',
           });
         }
       }
     }
-  }, [activeOrder, menuOptions]); // Add menuOptions dependency
+  }, [activeOrder, menuOptions]); 
 
   useEffect(() => {
     if (!isMounted) return;
@@ -148,13 +150,14 @@ export default function TakeawayPage() {
     setActiveOrder(newOrder);
 
     const subtotal = calculateSubtotal(currentOrderItems);
-    const taxAmount = subtotal * TAX_RATE;
+    const currentTaxRate = getTaxRate(); // Use dynamic tax rate
+    const taxAmount = subtotal * currentTaxRate;
     const totalAmount = subtotal + taxAmount;
 
     setCurrentBill({
       orderId: newOrder.id,
       subtotal,
-      taxRate: TAX_RATE,
+      taxRate: currentTaxRate,
       taxAmount,
       discountAmount: 0, 
       totalAmount,
@@ -165,7 +168,7 @@ export default function TakeawayPage() {
   
   const processPayment = () => {
     if (!currentBill || !activeOrder) return;
-    const success = updateSharedOrderStatus(activeOrder.id, 'paid'); // Mark as 'paid' directly
+    const success = updateSharedOrderStatus(activeOrder.id, 'paid'); 
     if (success) {
       setCurrentBill({ ...currentBill, paymentStatus: 'paid' });
       setActiveOrder({ ...activeOrder, status: 'paid' }); 
@@ -189,6 +192,7 @@ export default function TakeawayPage() {
     setActiveOrder(null);
     setSelectedMenuItemId('');
     setQuantity(1);
+    setTaxRate(getTaxRate()); // Re-fetch tax rate for new order
     toast({ title: 'New Order Started', description: 'Ready to take the next takeaway order.'});
   };
 
@@ -300,7 +304,7 @@ export default function TakeawayPage() {
                     ))}
                     <Separator />
                     <div className="flex justify-between"><p>Subtotal:</p><p>₹{currentBill.subtotal.toFixed(2)}</p></div>
-                    <div className="flex justify-between"><p>Tax ({TAX_RATE * 100}%):</p><p>₹{currentBill.taxAmount.toFixed(2)}</p></div>
+                    <div className="flex justify-between"><p>Tax ({(taxRate * 100).toFixed(1)}%):</p><p>₹{currentBill.taxAmount.toFixed(2)}</p></div>
                     <Separator />
                     <div className="flex justify-between text-base font-bold"><p>Total Amount:</p><p>₹{currentBill.totalAmount.toFixed(2)}</p></div>
                   </CardContent>
@@ -310,7 +314,7 @@ export default function TakeawayPage() {
                     )}
                     {currentBill.paymentStatus === 'paid' && (
                       <>
-                        <Button onClick={handlePrintBill} className="w-full" size="lg" variant="outline">
+                        <Button onClick={handlePrintBill} className="w-full" size="lg" variant="outline" aria-label="Print Bill">
                           <Printer className="mr-2 h-4 w-4" /> Print Bill
                         </Button>
                         <Button onClick={handleStartNewOrder} className="w-full" size="lg">

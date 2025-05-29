@@ -13,9 +13,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGr
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getMenuItems } from '@/lib/menuManager';
-import { getTableNumbersArray } from '@/lib/restaurantSettings';
+import { getTableNumbersArray, getTaxRate } from '@/lib/restaurantSettings'; // Import getTaxRate
 import type { MenuItem as MenuItemType, Order, OrderItem, User, OrderStatus } from '@/types';
-import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon, CookingPot, MessageSquare } from 'lucide-react'; // Added MessageSquare
+import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon, CookingPot, MessageSquare } from 'lucide-react';
 import Image from 'next/image';
 import {
   AlertDialog,
@@ -40,11 +40,11 @@ export default function WaiterPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedTable, setSelectedTable] = useState<string>('');
-  const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]); // Items for current submission
+  const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [itemComment, setItemComment] = useState<string>(''); // New state for item comment
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]); // All orders managed in this session by this waiter
+  const [itemComment, setItemComment] = useState<string>('');
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const { toast } = useToast();
 
   const [isBillConfirmOpen, setIsBillConfirmOpen] = useState(false);
@@ -53,6 +53,29 @@ export default function WaiterPage() {
   const [displayedReadyNotifications, setDisplayedReadyNotifications] = useState<Set<string>>(new Set());
   const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
   const [tableNumbers, setTableNumbers] = useState<number[]>([]);
+  const [taxRate, setTaxRate] = useState(0.08); // For displaying in confirmation
+
+  const calculateSubtotal = useCallback((items: OrderItem[]) => {
+    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  }, []);
+
+  const displayedSessionOrders = useMemo(() => {
+    if (selectedTable && pendingOrderForSelectedTable) {
+      return [pendingOrderForSelectedTable];
+    }
+    return activeOrders.filter(order => order.status === 'pending');
+  }, [selectedTable, activeOrders, pendingOrderForSelectedTable]);
+  
+  const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
+    if (!selectedTable || !isMounted) return undefined;
+    const tableNum = parseInt(selectedTable);
+    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'paid' && o.status !== 'cancelled' && o.status !== 'billed');
+  }, [selectedTable, activeOrders, isMounted]);
+
+  const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
+  const taxForBillDialog = subtotalForBillDialog * taxRate; // Use state taxRate
+  const totalForBillDialog = subtotalForBillDialog + taxForBillDialog;
+
 
   const groupedMenuOptions = useMemo(() => {
     if (!menuOptions) return {};
@@ -75,18 +98,16 @@ export default function WaiterPage() {
       setCurrentUser(user);
       setMenuOptions(getMenuItems());
       setTableNumbers(getTableNumbersArray());
+      setTaxRate(getTaxRate()); // Load tax rate
     }
   }, [router]);
-
-  const calculateSubtotal = useCallback((items: OrderItem[]) => {
-    return items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  }, []);
 
   const loadActiveOrders = useCallback(() => {
     if (!isMounted) return;
     const orders = getSharedOrders();
-    setActiveOrders(orders); // Load all orders for status checking
-    setTableNumbers(getTableNumbersArray()); // Refresh table numbers
+    setActiveOrders(orders); 
+    setTableNumbers(getTableNumbersArray()); 
+    setTaxRate(getTaxRate()); // Refresh tax rate
 
     if(currentUser) {
       const readyOrdersForThisWaiter = orders.filter(
@@ -112,19 +133,10 @@ export default function WaiterPage() {
   useEffect(() => {
     if(isMounted){
         loadActiveOrders();
-        const intervalId = setInterval(loadActiveOrders, 7000); // Poll every 7 seconds
+        const intervalId = setInterval(loadActiveOrders, 7000); 
         return () => clearInterval(intervalId);
     }
   }, [isMounted, loadActiveOrders]);
-
-  // This memo finds THE one pending order for the currently selected table from ALL active orders.
-  const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
-    if (!selectedTable || !isMounted) return undefined;
-    const tableNum = parseInt(selectedTable);
-    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'billed' && o.status !== 'paid' && o.status !== 'cancelled');
-  }, [selectedTable, activeOrders, isMounted]);
-
-  const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
 
   const allActiveDineInOrdersList = useMemo(() => {
     if (!isMounted) return [];
@@ -155,13 +167,10 @@ export default function WaiterPage() {
     const newOrderItem: OrderItem = {
       ...menuItem,
       quantity,
-      comment: itemComment.trim() || undefined, // Add comment, make undefined if empty
+      comment: itemComment.trim() || undefined, 
     };
 
     setCurrentOrderItems(prevItems => {
-      // Check if an item with the same ID AND same comment already exists in currentOrderItems
-      // For simplicity, we'll treat items with different comments (even if ID is same) as distinct for this "current selection"
-      // A more complex merge could happen on submit if needed, but this is usually fine.
       const existingItemIndex = prevItems.findIndex(item => item.id === newOrderItem.id && item.comment === newOrderItem.comment);
       
       if (existingItemIndex > -1) {
@@ -175,7 +184,7 @@ export default function WaiterPage() {
 
     setSelectedMenuItemId('');
     setQuantity(1);
-    setItemComment(''); // Clear comment field
+    setItemComment(''); 
   };
 
   const handleRemoveItemFromCurrentSelection = (itemId: string, itemCommentVal?: string) => {
@@ -200,7 +209,7 @@ export default function WaiterPage() {
     const existingOrderForTable = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'billed' && o.status !== 'paid' && o.status !== 'cancelled');
 
     if (existingOrderForTable) {
-      orderToUpdate = { ...existingOrderForTable, items: [...existingOrderForTable.items] }; // Deep copy items array
+      orderToUpdate = { ...existingOrderForTable, items: [...existingOrderForTable.items] }; 
 
       currentOrderItems.forEach(newItem => {
         const existingItemInOrderIndex = orderToUpdate.items.findIndex(
@@ -215,7 +224,7 @@ export default function WaiterPage() {
       
       orderToUpdate.timestamp = new Date().toISOString();
       if (orderToUpdate.status === 'ready' || orderToUpdate.status === 'served' || orderToUpdate.status === 'bill_requested') {
-         orderToUpdate.status = 'pending'; // Revert to pending if new items are added to an order that was further along
+         orderToUpdate.status = 'pending'; 
       } else if (!orderToUpdate.status) {
          orderToUpdate.status = 'pending';
       }
@@ -225,7 +234,7 @@ export default function WaiterPage() {
       orderToUpdate = {
         id: `ORD-${Date.now()}`,
         tableNumber: tableNum,
-        items: [...currentOrderItems], // Ensure fresh copy
+        items: [...currentOrderItems], 
         status: 'pending',
         timestamp: new Date().toISOString(),
         type: 'dine-in',
@@ -236,9 +245,9 @@ export default function WaiterPage() {
     }
 
     addOrUpdateSharedOrder(orderToUpdate);
-    setCurrentOrderItems([]); // Clear current selection
-    setItemComment(''); // Clear comment field
-    loadActiveOrders(); // Refresh the active orders to reflect the submission
+    setCurrentOrderItems([]); 
+    setItemComment(''); 
+    loadActiveOrders(); 
   };
 
   const handleRequestBillForSelectedTable = () => {
@@ -260,10 +269,9 @@ export default function WaiterPage() {
     const success = updateSharedOrderStatus(orderForBillConfirmation.id, 'bill_requested');
 
     if (success) {
-      const subtotal = calculateSubtotal(orderForBillConfirmation.items);
       toast({
         title: 'Bill Requested',
-        description: `Bill request for Table ${orderForBillConfirmation.tableNumber} (Subtotal: ₹${subtotal.toFixed(2)}) sent. Admin notified.`
+        description: `Bill request for Table ${orderForBillConfirmation.tableNumber} (Subtotal: ₹${subtotalForBillDialog.toFixed(2)}) sent. Admin notified.`
       });
       loadActiveOrders();
     } else {
@@ -274,7 +282,6 @@ export default function WaiterPage() {
     setItemComment('');
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
-    // setSelectedTable(''); // Keep table selected, allows waiter to see the "bill requested" status
   };
 
   const getStatusBadgeClass = (status: OrderStatus): string => {
@@ -297,7 +304,7 @@ export default function WaiterPage() {
     if (order.status === 'bill_requested') return 'occupied_bill_requested';
     if (order.status === 'ready' || order.status === 'served') return 'occupied_ready';
     if (order.status === 'preparing') return 'occupied_preparing';
-    return 'occupied_pending'; // Covers 'pending'
+    return 'occupied_pending'; 
   };
 
   const getTableStatusStyle = (status: TableDisplayStatus): string => {
@@ -388,8 +395,8 @@ export default function WaiterPage() {
                     <CardTitle className="text-xl">Create / Add to Order for Table {selectedTable}</CardTitle>
                     <CardDescription>Add items to the current selection for Table {selectedTable}.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4"> {/* Changed from space-y-6 */}
-                    <div className="space-y-1"> {/* Changed from space-y-2 */}
+                  <CardContent className="space-y-4"> 
+                    <div className="space-y-1"> 
                       <Label htmlFor="menuItem">Menu Item</Label>
                       <Select value={selectedMenuItemId} onValueChange={setSelectedMenuItemId} disabled={menuOptions.length === 0}>
                         <SelectTrigger id="menuItem">
@@ -412,7 +419,7 @@ export default function WaiterPage() {
                       </Select>
                       {menuOptions.length === 0 && <p className="text-xs text-muted-foreground">Menu is empty. Admin needs to add items.</p>}
                     </div>
-                    <div className="space-y-1"> {/* Changed from space-y-2 */}
+                    <div className="space-y-1"> 
                       <Label htmlFor="quantity">Quantity</Label>
                       <Input
                         id="quantity"
@@ -422,7 +429,7 @@ export default function WaiterPage() {
                         onChange={(e: ChangeEvent<HTMLInputElement>) => setQuantity(parseInt(e.target.value) || 1)}
                       />
                     </div>
-                    <div className="space-y-1"> {/* New field for Item Comment */}
+                    <div className="space-y-1"> 
                       <Label htmlFor="itemComment">Item Comment (Optional)</Label>
                       <Input
                         id="itemComment"
@@ -605,6 +612,10 @@ export default function WaiterPage() {
                 <AlertDialogTitle>Confirm Bill Request for Table {orderForBillConfirmation.tableNumber}?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This will notify the admin that Table {orderForBillConfirmation.tableNumber} is ready for billing. The order status will be changed to 'Bill Requested'.
+                  <br />
+                  Estimated Tax ({(taxRate * 100).toFixed(1)}%): ₹{taxForBillDialog.toFixed(2)}
+                  <br />
+                  Estimated Total (incl. Tax): ₹{totalForBillDialog.toFixed(2)}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <div className="my-4 space-y-2 max-h-60 overflow-y-auto text-sm">
