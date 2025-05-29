@@ -9,19 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { createUser, getUsers, updateUserPassword, deleteUser } from '@/lib/auth';
+import { createUser, getUsers, deleteUser } from '@/lib/auth'; // Removed updateUserPassword
 import type { User, UserRole, NewUserCredentials } from '@/types';
-import { UserPlus, Users, ShieldCheck, ChefHat, ConciergeBell, Pencil, Trash2, BadgeInfo } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogClose,
-} from "@/components/ui/dialog";
+import { UserPlus, Users, ShieldCheck, ChefHat, ConciergeBell, Trash2, BadgeInfo } from 'lucide-react'; // Removed Pencil
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,10 +30,6 @@ export function ManageUsersTool() {
   const [newUserRole, setNewUserRole] = useState<UserRole>('waiter');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
-  const [newPasswordForUpdate, setNewPasswordForUpdate] = useState('');
 
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const [showDeleteConfirmDialog, setShowDeleteConfirmDialog] = useState(false);
@@ -69,32 +55,6 @@ export function ManageUsersTool() {
       setNewUsername('');
       setNewUserPassword('');
       setNewUserRole('waiter');
-    } else {
-      toast({ title: 'Error', description: result.message, variant: 'destructive' });
-    }
-  };
-
-  const handleOpenPasswordDialog = (user: User) => {
-    setEditingUser(user);
-    setNewPasswordForUpdate('');
-    setShowPasswordDialog(true);
-  };
-
-  const handleUpdatePassword = (event: FormEvent) => {
-    event.preventDefault();
-    if (!editingUser || !newPasswordForUpdate.trim()) {
-      toast({ title: 'Error', description: 'Password cannot be empty.', variant: 'destructive' });
-      return;
-    }
-    setIsLoading(true);
-    const result = updateUserPassword(editingUser.id, newPasswordForUpdate);
-    setIsLoading(false);
-    setShowPasswordDialog(false);
-    setEditingUser(null);
-
-    if (result.success) {
-      toast({ title: 'Success', description: result.message });
-      setUsers(result.users || getUsers());
     } else {
       toast({ title: 'Error', description: result.message, variant: 'destructive' });
     }
@@ -213,9 +173,7 @@ export function ManageUsersTool() {
                       {user.role}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => handleOpenPasswordDialog(user)} disabled={isLoading} className="mr-2">
-                        <Pencil className="mr-1 h-3 w-3" /> Update Pass
-                      </Button>
+                      {/* Update Password Button Removed */}
                       <Button variant="destructive" size="sm" onClick={() => handleOpenDeleteDialog(user)} disabled={isLoading}>
                         <Trash2 className="mr-1 h-3 w-3" /> Delete
                       </Button>
@@ -228,43 +186,7 @@ export function ManageUsersTool() {
         </CardContent>
       </Card>
 
-      {/* Update Password Dialog */}
-      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Update Password for {editingUser?.username}</DialogTitle>
-            <DialogDescription>
-              Enter the new password for this user. Click save when you&apos;re done.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleUpdatePassword}>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="updatePassword" className="text-right">
-                  New Password
-                </Label>
-                <Input
-                  id="updatePassword"
-                  type="password"
-                  value={newPasswordForUpdate}
-                  onChange={(e) => setNewPasswordForUpdate(e.target.value)}
-                  className="col-span-3"
-                  required
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? <Pencil className="mr-2 h-4 w-4 animate-spin" /> : <Pencil className="mr-2 h-4 w-4" />}
-                Save Password
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Update Password Dialog Removed */}
 
       {/* Delete User Confirmation Dialog */}
       <AlertDialog open={showDeleteConfirmDialog} onOpenChange={setShowDeleteConfirmDialog}>
@@ -287,3 +209,4 @@ export function ManageUsersTool() {
     </div>
   );
 }
+
