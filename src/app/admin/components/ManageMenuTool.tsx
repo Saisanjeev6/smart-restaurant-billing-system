@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import React from 'react';
 
 export function ManageMenuTool() {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -39,6 +40,18 @@ export function ManageMenuTool() {
   useEffect(() => {
     setMenuItems(getMenuItems());
   }, []);
+
+  const groupedMenuItems = useMemo(() => {
+    if (!menuItems) return {};
+    return menuItems.reduce((acc, item) => {
+      const category = item.category || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(item);
+      return acc;
+    }, {} as Record<string, MenuItem[]>);
+  }, [menuItems]);
 
   const resetForm = () => {
     setItemName('');
@@ -85,6 +98,8 @@ export function ManageMenuTool() {
     setItemName(item.name);
     setItemPrice(String(item.price));
     setItemCategory(item.category);
+    // Scroll to top or to the form for better UX
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeleteItem = (item: MenuItem) => {
@@ -179,7 +194,7 @@ export function ManageMenuTool() {
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl"><Utensils className="text-primary" /> Current Menu Items</CardTitle>
-          <CardDescription>List of all items available on the menu. Click actions to manage.</CardDescription>
+          <CardDescription>List of all items available on the menu, grouped by category.</CardDescription>
         </CardHeader>
         <CardContent className="max-h-[400px] overflow-y-auto">
           {menuItems.length === 0 ? (
@@ -189,26 +204,35 @@ export function ManageMenuTool() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Category</TableHead>
                   <TableHead>Price (₹)</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {menuItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.name}</TableCell>
-                    <TableCell>{item.category}</TableCell>
-                    <TableCell>₹{item.price.toFixed(2)}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="outline" size="sm" onClick={() => handleEditItem(item)} disabled={isLoading || (isEditing && editingItemId === item.id)} className="mr-2">
-                        <Pencil className="mr-1 h-3 w-3" /> Edit
-                      </Button>
-                      <Button variant="destructive" size="sm" onClick={() => handleDeleteItem(item)} disabled={isLoading || (isEditing && editingItemId === item.id)}>
-                        <Trash2 className="mr-1 h-3 w-3" /> Delete
-                      </Button>
-                    </TableCell>
-                  </TableRow>
+                {Object.entries(groupedMenuItems)
+                  .sort(([categoryA], [categoryB]) => categoryA.localeCompare(categoryB)) // Sort categories alphabetically
+                  .map(([category, itemsInCategory]) => (
+                  <React.Fragment key={category}>
+                    <TableRow className="bg-muted/30 hover:bg-muted/40">
+                      <TableCell colSpan={3} className="py-2 font-semibold text-primary">
+                        {category}
+                      </TableCell>
+                    </TableRow>
+                    {itemsInCategory.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell>₹{item.price.toFixed(2)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => handleEditItem(item)} disabled={isLoading || (isEditing && editingItemId === item.id)} className="mr-2">
+                            <Pencil className="mr-1 h-3 w-3" /> Edit
+                          </Button>
+                          <Button variant="destructive" size="sm" onClick={() => handleDeleteItem(item)} disabled={isLoading || (isEditing && editingItemId === item.id)}>
+                            <Trash2 className="mr-1 h-3 w-3" /> Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
