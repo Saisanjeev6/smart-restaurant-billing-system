@@ -109,13 +109,11 @@
 
 @media print {
   body > div#admin-page-container > header, /* AppHeader */
-  body > div#admin-page-container > main > div > div.grid.w-full.grid-cols-1.mb-6.md\:grid-cols-5, /* TabsList */
-  body > div#admin-page-container > main > div > div > div > div#admin-bill-fetch-card, /* Bill Fetch Card */
-  body > div#admin-page-container > main > div > div > div > div#admin-final-bill-card .card-footer button:not([aria-label*="Print"]), /* Hide non-print buttons in bill card footer */
-  body > div#admin-page-container > main > div > div > div > div#admin-final-bill-card .flex.items-end.gap-2, /* Hide discount input */
-  #admin-final-bill-card .card-footer button[aria-label*="Process Payment"],
-  #admin-final-bill-card .card-footer button:not(.print-button-class), /* Example if you add a specific class for print button */
-  .hide-on-print {
+  body > div#admin-page-container > main > div > .mb-6, /* TabsList - simplified selector */
+  body > div#admin-page-container > main > div > div > div > div#admin-bill-requests-card, /* Bill Requests Card */
+  body > div#admin-page-container > main > div > div > div > div#admin-final-bill-card .card-footer button:not([aria-label*="Print"]),
+  body > div#admin-page-container > main > div > div > div > div#admin-final-bill-card .flex.items-end.gap-2, /* Discount input */
+  .hide-on-print { /* General class to hide elements */
     display: none !important;
   }
 

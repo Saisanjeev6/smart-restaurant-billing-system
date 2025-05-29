@@ -113,16 +113,13 @@ export default function AdminPage() {
     }
   }, [router]);
 
-
   const calculateOrderTotal = useCallback((items: OrderItem[]) => {
-    if (menuOptions.length === 0) { // Fallback if menu options not loaded
-        // console.log("DEBUG calculateOrderTotal: Using item.price directly as menuOptions empty", items);
+    if (menuOptions.length === 0) {
         return items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 0), 0);
     }
     return items.reduce((sum, item) => {
         const currentMenuItem = menuOptions.find(mi => mi.id === item.id);
         const priceToUse = currentMenuItem ? currentMenuItem.price : Number(item.price) || 0;
-        // console.log(`DEBUG calculateOrderTotal: Item: ${item.name}, Original Price: ${item.price}, Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}`);
         return sum + (priceToUse * (Number(item.quantity) || 0));
     }, 0);
   }, [menuOptions]);
@@ -271,12 +268,10 @@ export default function AdminPage() {
       order.items.forEach(item => {
         const currentMenuItem = menuOptions.find(menuItem => menuItem.id === item.id);
         const priceToUse = currentMenuItem ? currentMenuItem.price : Number(item.price) || 0;
-
-        // if (item.name === 'Mushroom Risotto' || item.name === 'Creamy Pasta Carbonara' || item.name === 'Margherita Pizza') {
-        //      console.log(
-        //         `DEBUG salesByMenuItem: Processing ${item.name}. Order Item Price: ${item.price}, Current Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}, Qty: ${item.quantity}, Order ID: ${order.id}`
-        //     );
-        // }
+        
+        // console.log(
+        //     `DEBUG salesByMenuItem: Processing ${item.name}. Order Item Price: ${Number(item.price)}, Current Menu Price: ${currentMenuItem?.price}, Price Used: ${priceToUse}, Qty: ${Number(item.quantity)}, Order ID: ${order.id}`
+        // );
 
         if (!itemSales[item.id]) {
           itemSales[item.id] = { name: item.name, quantitySold: 0, totalSales: 0, category: item.category };
@@ -411,7 +406,6 @@ export default function AdminPage() {
     if (orderForBill.status === 'bill_requested') {
       const success = updateSharedOrderStatus(orderForBill.id, 'paid');
       if (success) {
-        // currentBill already has discount applied if any, so its totalAmount is correct
         setCurrentBill(prev => prev ? { ...prev, paymentStatus: 'paid' } : null);
         setOrderForBill(prev => prev ? { ...prev, status: 'paid' } : null);
         toast({
@@ -434,8 +428,8 @@ export default function AdminPage() {
             setCurrentBill(null);
             setDiscountPercentage(0);
             loadAllOrdersAndSettings();
-        }, 200); // Delay clearing to allow print dialog to fully process
-      }, 100); // Delay print to allow DOM to update
+        }, 200); 
+      }, 150); // Increased delay for printing
     } else {
       toast({ title: 'Action Needed', description: `Order status is "${orderForBill.status}". Finalize payment to print.`, variant: 'default'});
     }
