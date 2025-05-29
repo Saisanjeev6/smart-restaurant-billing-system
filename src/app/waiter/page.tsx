@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select'; // Added SelectGroup, SelectLabel
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { getMenuItems } from '@/lib/menuManager';
-import { getTableNumbersArray } from '@/lib/restaurantSettings'; // Import new function
+import { getTableNumbersArray } from '@/lib/restaurantSettings';
 import type { MenuItem as MenuItemType, Order, OrderItem, User, OrderStatus } from '@/types';
 import { PlusCircle, Trash2, Send, ReceiptText, ClipboardEdit, ListOrdered, Sparkles, BellRing, CheckCircle, LayoutGrid, Coffee, Utensils, FileTextIcon } from 'lucide-react';
 import Image from 'next/image';
@@ -32,7 +32,7 @@ import { getCurrentUser } from '@/lib/auth';
 import { getSharedOrders, addOrUpdateSharedOrder, updateSharedOrderStatus } from '@/lib/orderManager';
 import { Badge } from '@/components/ui/badge';
 
-type TableDisplayStatus = 'vacant' | 'selected' | 'occupied_pending' | 'occupied_ready' | 'occupied_bill_requested' | 'occupied_billed_paid';
+type TableDisplayStatus = 'vacant' | 'selected' | 'occupied_pending' | 'occupied_ready' | 'occupied_bill_requested';
 
 
 export default function WaiterPage() {
@@ -42,15 +42,27 @@ export default function WaiterPage() {
   const [currentOrderItems, setCurrentOrderItems] = useState<OrderItem[]>([]);
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
-  const [activeOrders, setActiveOrders] = useState<Order[]>([]); 
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const { toast } = useToast();
-  
+
   const [isBillConfirmOpen, setIsBillConfirmOpen] = useState(false);
   const [orderForBillConfirmation, setOrderForBillConfirmation] = useState<Order | null>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [displayedReadyNotifications, setDisplayedReadyNotifications] = useState<Set<string>>(new Set());
   const [menuOptions, setMenuOptions] = useState<MenuItemType[]>([]);
-  const [tableNumbers, setTableNumbers] = useState<number[]>([]); // State for table numbers
+  const [tableNumbers, setTableNumbers] = useState<number[]>([]);
+
+  const groupedMenuOptions = useMemo(() => {
+    if (!menuOptions) return {};
+    return menuOptions.reduce((acc, item) => {
+      const category = item.category || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(item);
+      return acc;
+    }, {} as Record<string, MenuItemType[]>);
+  }, [menuOptions]);
 
   useEffect(() => {
     setIsMounted(true);
@@ -60,7 +72,7 @@ export default function WaiterPage() {
     } else {
       setCurrentUser(user);
       setMenuOptions(getMenuItems());
-      setTableNumbers(getTableNumbersArray()); // Get table numbers from settings
+      setTableNumbers(getTableNumbersArray());
     }
   }, [router]);
 
@@ -72,7 +84,7 @@ export default function WaiterPage() {
     if (!isMounted) return;
     const orders = getSharedOrders();
     setActiveOrders(orders);
-    setTableNumbers(getTableNumbersArray()); // Refresh table numbers in case they changed
+    setTableNumbers(getTableNumbersArray());
 
     if(currentUser) {
       const readyOrdersForThisWaiter = orders.filter(
@@ -85,7 +97,7 @@ export default function WaiterPage() {
           toast({
             title: 'Order Ready!',
             description: `Order for ${order.type === 'dine-in' ? `Table ${order.tableNumber}` : `Token ${order.id.slice(-6)}`} is ready for pickup.`,
-            variant: 'default', 
+            variant: 'default',
             duration: 7000,
           });
           newNotifications.add(order.id);
@@ -94,11 +106,11 @@ export default function WaiterPage() {
       }
     }
   }, [isMounted, currentUser, toast, displayedReadyNotifications]);
-  
+
   useEffect(() => {
     if(isMounted){
         loadActiveOrders();
-        const intervalId = setInterval(loadActiveOrders, 7000); 
+        const intervalId = setInterval(loadActiveOrders, 7000);
         return () => clearInterval(intervalId);
     }
   }, [isMounted, loadActiveOrders]);
@@ -106,9 +118,9 @@ export default function WaiterPage() {
   const pendingOrderForSelectedTable = useMemo((): Order | undefined => {
     if (!selectedTable || !isMounted) return undefined;
     const tableNum = parseInt(selectedTable);
-    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
+    return activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'billed' && o.status !== 'paid' && o.status !== 'cancelled');
   }, [selectedTable, activeOrders, isMounted]);
-  
+
   const subtotalForBillDialog = orderForBillConfirmation ? calculateSubtotal(orderForBillConfirmation.items) : 0;
 
   const allUnbilledDineInOrdersList = useMemo(() => {
@@ -121,7 +133,7 @@ export default function WaiterPage() {
 
   const handleSelectTable = (tableNum: number) => {
     setSelectedTable(String(tableNum));
-    setCurrentOrderItems([]); 
+    setCurrentOrderItems([]);
   };
 
   const handleAddItemToOrder = () => {
@@ -167,33 +179,33 @@ export default function WaiterPage() {
     const tableNum = parseInt(selectedTable);
     let orderToUpdate: Order;
 
-    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && (o.status === 'pending' || o.status === 'preparing' || o.status === 'ready' || o.status === 'served'));
+    const existingOrder = activeOrders.find(o => o.tableNumber === tableNum && o.type === 'dine-in' && o.status !== 'billed' && o.status !== 'paid' && o.status !== 'cancelled');
 
     if (existingOrder) {
       orderToUpdate = { ...existingOrder };
-      
+
       const updatedItemsMap = new Map<string, OrderItem>();
-      orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item})); 
+      orderToUpdate.items.forEach(item => updatedItemsMap.set(item.id, {...item}));
 
       currentOrderItems.forEach(newItem => {
         if (updatedItemsMap.has(newItem.id)) {
           const currentItem = updatedItemsMap.get(newItem.id)!;
-          currentItem.quantity += newItem.quantity; 
+          currentItem.quantity += newItem.quantity;
         } else {
-          updatedItemsMap.set(newItem.id, {...newItem}); 
+          updatedItemsMap.set(newItem.id, {...newItem});
         }
       });
       orderToUpdate.items = Array.from(updatedItemsMap.values());
       orderToUpdate.timestamp = new Date().toISOString();
-      orderToUpdate.status = 'pending'; // Always set to pending when adding new items to kitchen
-      
+      orderToUpdate.status = 'pending';
+
 
       toast({ title: 'Order Updated', description: `Items added/updated for Table ${selectedTable}. Sent to kitchen.` });
-    } else { 
+    } else {
       orderToUpdate = {
         id: `ORD-${Date.now()}`,
         tableNumber: tableNum,
-        items: [...currentOrderItems], 
+        items: [...currentOrderItems],
         status: 'pending',
         timestamp: new Date().toISOString(),
         type: 'dine-in',
@@ -202,14 +214,14 @@ export default function WaiterPage() {
       };
       toast({ title: 'Order Submitted', description: `Order for Table ${selectedTable} sent to kitchen.` });
     }
-    
+
     addOrUpdateSharedOrder(orderToUpdate);
-    setCurrentOrderItems([]); 
-    loadActiveOrders(); 
+    setCurrentOrderItems([]);
+    loadActiveOrders();
   };
 
-  const handleRequestBillForSelectedTable = () => { 
-    if (!pendingOrderForSelectedTable) { 
+  const handleRequestBillForSelectedTable = () => {
+    if (!pendingOrderForSelectedTable) {
       toast({ title: 'Error', description: `No active order found for Table ${selectedTable} to bill. Submit items first.`, variant: 'destructive' });
       return;
     }
@@ -225,21 +237,22 @@ export default function WaiterPage() {
     if (!orderForBillConfirmation) return;
 
     const success = updateSharedOrderStatus(orderForBillConfirmation.id, 'bill_requested');
-    
+
     if (success) {
       const subtotal = calculateSubtotal(orderForBillConfirmation.items);
-      toast({ 
-        title: 'Bill Requested', 
-        description: `Bill request for Table ${orderForBillConfirmation.tableNumber} (Subtotal: ₹${subtotal.toFixed(2)}) sent. Admin notified.` 
+      toast({
+        title: 'Bill Requested',
+        description: `Bill request for Table ${orderForBillConfirmation.tableNumber} (Subtotal: ₹${subtotal.toFixed(2)}) sent. Admin notified.`
       });
       loadActiveOrders();
     } else {
       toast({ title: 'Error', description: 'Failed to request bill.', variant: 'destructive' });
     }
-    
-    setCurrentOrderItems([]); 
+
+    setCurrentOrderItems([]);
     setIsBillConfirmOpen(false);
     setOrderForBillConfirmation(null);
+    // setSelectedTable(''); // Clear selected table after billing
   };
 
   const getStatusBadgeClass = (status: OrderStatus): string => {
@@ -249,7 +262,7 @@ export default function WaiterPage() {
       case 'ready': return 'bg-green-100 text-green-700 border-green-300 animate-pulse';
       case 'served': return 'bg-purple-100 text-purple-700 border-purple-300';
       case 'bill_requested': return 'bg-orange-100 text-orange-700 border-orange-300 font-semibold';
-      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400'; 
+      case 'billed': return 'bg-gray-200 text-gray-800 border-gray-400';
       case 'paid': return 'bg-teal-100 text-teal-700 border-teal-300 font-semibold';
       default: return 'bg-gray-50 text-gray-600 border-gray-200';
     }
@@ -261,7 +274,7 @@ export default function WaiterPage() {
     if (!order) return 'vacant';
     if (order.status === 'bill_requested') return 'occupied_bill_requested';
     if (order.status === 'ready' || order.status === 'served') return 'occupied_ready';
-    return 'occupied_pending'; 
+    return 'occupied_pending';
   };
 
   const getTableStatusStyle = (status: TableDisplayStatus): string => {
@@ -293,11 +306,11 @@ export default function WaiterPage() {
       </div>
     );
   }
-  
+
   const canSubmitCurrentSelection = selectedTable && currentOrderItems.length > 0;
-  const canRequestBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 && 
-                                         (pendingOrderForSelectedTable.status !== 'bill_requested' && 
-                                          pendingOrderForSelectedTable.status !== 'billed' && 
+  const canRequestBillForSelectedTable = !!pendingOrderForSelectedTable && pendingOrderForSelectedTable.items.length > 0 &&
+                                         (pendingOrderForSelectedTable.status !== 'bill_requested' &&
+                                          pendingOrderForSelectedTable.status !== 'billed' &&
                                           pendingOrderForSelectedTable.status !== 'paid');
 
 
@@ -358,9 +371,18 @@ export default function WaiterPage() {
                           <SelectValue placeholder={menuOptions.length === 0 ? "Loading menu..." : "Select an item"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {menuOptions.map(item => (
-                            <SelectItem key={item.id} value={item.id}>{item.name} - ₹{item.price.toFixed(2)}</SelectItem>
-                          ))}
+                          {Object.entries(groupedMenuOptions)
+                            .sort(([categoryA], [categoryB]) => categoryA.localeCompare(categoryB))
+                            .map(([category, itemsInCategory]) => (
+                              <SelectGroup key={category}>
+                                <SelectLabel>{category}</SelectLabel>
+                                {itemsInCategory.map(item => (
+                                  <SelectItem key={item.id} value={item.id}>
+                                    {item.name} - ₹{item.price.toFixed(2)}
+                                  </SelectItem>
+                                ))}
+                              </SelectGroup>
+                            ))}
                         </SelectContent>
                       </Select>
                       {menuOptions.length === 0 && <p className="text-xs text-muted-foreground">Menu is empty. Admin needs to add items.</p>}
@@ -414,7 +436,7 @@ export default function WaiterPage() {
                       </CardFooter>
                     )}
                   </Card>
-                  
+
                   <Card className="shadow-lg">
                     <CardHeader>
                       <CardTitle className="text-xl flex items-center justify-between">
@@ -426,7 +448,7 @@ export default function WaiterPage() {
                           </Badge>
                         )}
                       </CardTitle>
-                      {pendingOrderForSelectedTable && 
+                      {pendingOrderForSelectedTable &&
                           <CardDescription>
                               Total subtotal: ₹{calculateSubtotal(pendingOrderForSelectedTable.items).toFixed(2)}
                           </CardDescription>
@@ -479,7 +501,7 @@ export default function WaiterPage() {
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl"><ListOrdered /> All Active Dine-in Orders</CardTitle>
-                <CardDescription>Overview of all dine-in orders not yet paid. Refreshing for status updates.</CardDescription>
+                <CardDescription>Overview of all dine-in orders not yet paid or billed. Refreshing for status updates.</CardDescription>
               </CardHeader>
               <CardContent>
                 {allUnbilledDineInOrdersList.length === 0 ? (
