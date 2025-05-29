@@ -212,8 +212,8 @@ export function ManageUsersTool() {
                       {getRoleIcon(user.role)}
                       {user.role}
                     </TableCell>
-                    <TableCell className="text-right space-x-2">
-                      <Button variant="outline" size="sm" onClick={() => handleOpenPasswordDialog(user)} disabled={isLoading}>
+                    <TableCell className="text-right">
+                      <Button variant="outline" size="sm" onClick={() => handleOpenPasswordDialog(user)} disabled={isLoading} className="mr-2">
                         <Pencil className="mr-1 h-3 w-3" /> Update Pass
                       </Button>
                       <Button variant="destructive" size="sm" onClick={() => handleOpenDeleteDialog(user)} disabled={isLoading}>
